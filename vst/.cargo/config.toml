@@ -1,0 +1,3 @@
+[alias]
+# `cargo xtask bundle raydrone --release` → builds the VST3 + CLAP bundle.
+xtask = "run --package xtask --release --"

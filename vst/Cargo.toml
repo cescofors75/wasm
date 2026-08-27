@@ -1,0 +1,48 @@
+[package]
+name = "raydrone"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["RayDrone"]
+description = "RayDrone (simplified) — stochastic ray-traced granular drone VST3/CLAP instrument"
+
+[workspace]
+members = ["xtask"]
+
+[lib]
+# `lib` so the engine can be unit-tested; `cdylib` for the plugin binary.
+crate-type = ["cdylib", "lib"]
+
+# Standalone desktop app (build with `--features standalone`). A normal OS window,
+# so the COMPUTER KEYBOARD plays the piano — unlike inside a DAW, where the host
+# intercepts keystrokes.
+[[bin]]
+name = "raydrone-standalone"
+path = "src/bin/standalone.rs"
+required-features = ["standalone"]
+
+[features]
+# `jack/dynamic_loading` makes libjack load at runtime, so the standalone builds
+# on a stock macOS without JACK installed (it falls back to CoreAudio).
+standalone = ["nih_plug/standalone", "jack/dynamic_loading"]
+
+[dependencies]
+# Shared DSP kernel (same code the WASM engine links). Path dep, no crates.io.
+raydrone_core = { path = "../../core" }
+# Pinned to the exact commit already locked in Cargo.lock, so an incidental
+# `cargo update` can't silently move both crates to a different upstream
+# revision out from under the lockfile.
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "f36931f7af4646065488a9845d8f8c2f95252c23" }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "f36931f7af4646065488a9845d8f8c2f95252c23" }
+hound = "3.5"
+rfd = "0.14"
+jack = { version = "0.11.4", optional = true, default-features = false }
+
+[profile.release]
+lto = "thin"
+opt-level = 3
+
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = "none"

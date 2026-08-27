@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-27T00:00:00+02:00",
+  "title": "Design System: RayDrone Signal Field",
+  "extensions": {
+    "breakpoints": [
+      { "name": "mobile", "value": "760px" },
+      { "name": "stacked", "value": "1100px" },
+      { "name": "wide", "value": "1200px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Load and Play actions use complete inversion.",
+      "html": "<button class=\"ds-primary\">PLAY</button>",
+      "css": ".ds-primary{min-height:52px;padding:9px 12px;border:1px solid #fff;border-radius:0;background:#fff;color:#000;font:600 .84rem/1 Bahnschrift,Arial Narrow,sans-serif;letter-spacing:.055em;text-transform:uppercase;cursor:pointer}.ds-primary:hover{background:#000;color:#fff}.ds-primary:focus-visible{outline:2px solid #fff;outline-offset:3px}"
+    },
+    {
+      "name": "Environment Navigation",
+      "kind": "nav",
+      "description": "Three contiguous operating depths with inversion for the active mode.",
+      "html": "<nav class=\"ds-nav\"><button class=\"is-active\">BASIC</button><button>MEDIUM</button><button>PROFESSIONAL</button></nav>",
+      "css": ".ds-nav{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid #fff}.ds-nav button{min-height:44px;border:0;border-right:1px solid #fff;border-radius:0;background:#000;color:#fff;font:600 .7rem/1 Bahnschrift,Arial Narrow,sans-serif;letter-spacing:.09em}.ds-nav button:last-child{border-right:0}.ds-nav button:hover,.ds-nav .is-active{background:#fff;color:#000}.ds-nav button:focus-visible{outline:2px solid #fff;outline-offset:3px}"
+    },
+    {
+      "name": "Material Specimen",
+      "kind": "custom",
+      "description": "A tactile audible material sample with a functional barcode signature.",
+      "html": "<button class=\"ds-material is-active\">METAL<span>Brillo y armónicos.</span><i></i></button>",
+      "css": ".ds-material{display:block;min-height:94px;padding:12px 10px;border:1px solid #fff;border-radius:0;background:#000;color:#fff;text-align:left;font:600 .72rem/1 Bahnschrift,Arial Narrow,sans-serif}.ds-material span{display:block;margin-top:8px;font-size:.64rem;opacity:.62}.ds-material i{display:block;height:16px;margin-top:14px;background:repeating-linear-gradient(90deg,currentColor 0 1px,transparent 1px 5px)}.ds-material:hover,.ds-material.is-active{background:#fff;color:#000}.ds-material:focus-visible{outline:2px solid #fff;outline-offset:3px}"
+    },
+    {
+      "name": "Framed Station",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Flat operational containment; never a floating card.",
+      "html": "<section class=\"ds-station\"><h3>MATERIAL</h3><p>Surface parameters.</p></section>",
+      "css": ".ds-station{padding:16px;border:1px solid rgba(255,255,255,.34);border-radius:0;background:#000;color:#fff}.ds-station h3{margin:0 0 16px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.34);font:600 .72rem/1.2 Bahnschrift,Arial Narrow,sans-serif;letter-spacing:.1em}.ds-station p{margin:0;font:400 15px/1.45 Bahnschrift,Arial Narrow,sans-serif}"
+    },
+    {
+      "name": "Analysis Hatch",
+      "kind": "custom",
+      "description": "The threshold between musical operation and mathematical study.",
+      "html": "<button class=\"ds-analysis\"><span>MATHEMATICAL ANALYSIS</span><small>CONVERGENCE · WASM</small><b>+</b></button>",
+      "css": ".ds-analysis{display:flex;width:100%;min-height:74px;align-items:center;justify-content:space-between;gap:20px;padding:0 18px;border:1px solid #fff;border-radius:0;background:#fff;color:#000;text-align:left}.ds-analysis span{font:500 1.5rem/1 Bahnschrift,Arial Narrow,sans-serif;letter-spacing:.055em}.ds-analysis small{font:500 .65rem/1.3 Cascadia Mono,Consolas,monospace}.ds-analysis b{font:400 2rem/1 Cascadia Mono,Consolas,monospace}.ds-analysis:hover{background:#000;color:#fff}.ds-analysis:focus-visible{outline:2px solid #fff;outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Data-Sublime Instrument",
+    "overview": "RayDrone behaves like a live acoustic field made operable. Its waveform is the dominant object and every control reads as a calibrated part of that field. Expression never obscures operation.",
+    "keyCharacteristics": [
+      "Pure black and white with state expressed by inversion.",
+      "Hairline frames, barcode density and sine lattices used functionally.",
+      "One dominant signal field followed by material specimens and parameter bays.",
+      "Mathematical analysis is a separate advanced destination.",
+      "Dense information remains aligned, tabular and keyboard-operable."
+    ],
+    "rules": [
+      { "name": "The Binary Field Rule", "body": "Interface chrome uses only pure black and pure white; no gray ramps, gradients, glow or colored accents.", "section": "colors" },
+      { "name": "The Inversion Rule", "body": "Active, selected and primary states invert foreground and background instead of introducing a new color.", "section": "colors" },
+      { "name": "The Measurement Rule", "body": "Values align tabularly and never compete with larger action labels.", "section": "typography" },
+      { "name": "The Flat Signal Rule", "body": "A control may invert or strengthen its frame in response to state; it never lifts off the surface.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do make the live signal the largest visual object in the first viewport.",
+      "Do preserve familiar buttons, inputs, keyboard focus and readable labels.",
+      "Do use barcode texture to communicate activity, progress or selection.",
+      "Do reduce information density deliberately across breakpoints."
+    ],
+    "donts": [
+      "Don't use rounded cards, glass, glow, gradients or neon.",
+      "Don't imitate a hardware synth with decorative knobs.",
+      "Don't hide primary instrument controls behind tabs or dropdown navigation.",
+      "Don't place mathematical analysis inside the main creative flow."
+    ]
+  }
+}

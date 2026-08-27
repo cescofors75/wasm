@@ -1,0 +1,2419 @@
+<!--
+THESIS: RayDrone is a live signal field, not a hardware-synth imitation or a card dashboard.
+OWN-WORLD: Pure black/white, hairline frames, barcode density, sine lattices and inversion states.
+STORY: Load a source, play it, choose a material, shape the scene, then enter mathematical analysis only when needed.
+FIRST VIEWPORT: Compact command header above a dominant ray canvas; transport and Basic controls remain immediately reachable.
+FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
+-->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RayDrone · WASM</title>
+    <link rel="stylesheet" href="labs-2026.css">
+    <!-- Vercel Analytics solo existe en un despliegue de Vercel. Cargarlo al
+         servir localmente con Python producía un 404 ruidoso en consola. -->
+    <script>
+        window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+        if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+            const analytics = document.createElement('script');
+            analytics.defer = true;
+            analytics.src = '/_vercel/insights/script.js';
+            document.head.appendChild(analytics);
+        }
+    </script>
+    <script src="i18n.js?v=labs-2026"></script>
+</head>
+<body data-environment="basic">
+    <div class="container">
+        <header class="studio-head">
+            <div class="studio-brand">
+                <h1>RayDrone</h1>
+                <div class="studio-copy">
+                    <p class="sub">Acoustic ray instrument</p>
+                    <span class="badge">Rust · WebAssembly · AudioWorklet · QMC Engine</span>
+                </div>
+            </div>
+            <div class="engine-live">DSP LIVE · LOCAL</div>
+            <div class="environment-switch" role="group" aria-label="Entorno de RayDrone">
+                <button type="button" data-environment="basic" class="active" aria-pressed="true">Básico</button>
+                <button type="button" data-environment="medium" aria-pressed="false">Medio</button>
+                <button type="button" data-environment="professional" aria-pressed="false">Profesional</button>
+            </div>
+            <details class="preferences">
+                <summary>Idioma</summary>
+                <div class="ui-selects" aria-label="Preferencias visuales">
+                    <select class="language-select" aria-label="Idioma" title="Idioma">
+                        <option value="ca">CATALÀ</option><option value="es">CASTELLANO</option><option value="eu">EUSKERA</option>
+                        <option value="gl">GALEGO</option><option value="en">ENGLISH</option><option value="fr">FRANÇAIS</option>
+                        <option value="de">DEUTSCH</option><option value="it">ITALIANO</option><option value="pt">PORTUGUÊS</option>
+                    </select>
+                </div>
+            </details>
+        </header>
+
+        <div class="deck">
+            <!-- ── SCENE / TRANSPORT ── -->
+            <section class="panel scene">
+                <div class="panel-title"><span>Scene<span class="info-badge" tabindex="0">i<span class="info-tip">Carga el WAV/MP3 que los rayos van a granular. Arriba: dónde caen los rayos sobre la onda de origen. Abajo: la señal que realmente suena (osciloscopio + espectro).</span></span></span><span>Source · Rays · Output</span></div>
+
+                <div class="source-actions">
+                <label class="file-label" id="file-label" for="file">Cargar WAV / MP3</label>
+                <!-- iOS Safari con `audio/*` a secas abre el selector de FOTOS
+                     (o deja el audio en gris); listar extensiones + MIME
+                     concretos hace que ofrezca la app Archivos con los
+                     audios seleccionables. -->
+                <input type="file" id="file" accept="audio/*,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/aac,audio/flac,audio/ogg,.wav,.mp3,.m4a,.aac,.flac,.ogg,.aif,.aiff">
+                <button class="btn btn-play" id="play" disabled>Esperando audio…</button>
+                </div>
+
+                <div id="viz-wrap">
+                    <canvas id="wave" width="700" height="150"></canvas>
+                    <button class="preset" id="fs-btn" title="Pantalla completa (onda + rayos)">⛶</button>
+                    <!-- HUD de directo: leyenda de teclas (escenas + toggles). Tecla H lo oculta. -->
+                    <div id="hud">
+                        <span id="hud-scenes"></span>
+                        <span id="hud-tags"></span>
+                    </div>
+                </div>
+                <div class="ctl zoom-control">
+                    <label>Zoom (rueda / pellizco · ampliado: click fino, minimapa salta) <span class="v" id="zoom-v">×1</span></label>
+                    <input type="range" id="zoom" min="1" max="64" value="1" step="0.1">
+                </div>
+                <div id="meter"><div id="meter-fill"></div></div>
+
+                <div class="ctl output-monitor">
+                    <label>Señal de salida — lo que realmente suena (osciloscopio + espectro)</label>
+                </div>
+                <canvas id="outwave" width="700" height="90"></canvas>
+
+                <div class="presets" id="scene-presets">
+                    <button class="preset" data-mode="dry" data-t="0.3" data-aber="0" data-tail="0" data-evo="0" data-width="0" data-oct="0" data-reverb="0">Original · Ray direct</button>
+                    <button class="preset active" data-mode="drone" data-t="0.35" data-aber="0" data-tail="0" data-evo="0" data-width="35" data-oct="0" data-reverb="15">Drone</button>
+                    <button class="preset" data-mode="shimmer" data-t="0.6" data-aber="18" data-tail="0" data-evo="12" data-width="60" data-oct="50" data-reverb="45">Shimmer</button>
+                </div>
+
+                <button class="btn btn-record" id="rec" disabled>● Grabar WAV</button>
+                <div class="status" id="status">Carga un WAV o MP3 para empezar.</div>
+            </section>
+
+            <section class="panel basic-console" aria-labelledby="basic-title">
+                <div class="basic-intro">
+                    <div>
+                        <h2 id="basic-title">Crea una escena, no una cadena de efectos</h2>
+                        <p>Elige una materia y describe el resultado con cuatro gestos audibles.</p>
+                    </div>
+                    <span class="badge">Básico · controles macro</span>
+                </div>
+                <div class="material-choices" role="group" aria-label="Material sonoro">
+                    <button type="button" class="material-choice active" data-material-choice="0">Vacío<span>Natural, sin color.</span></button>
+                    <button type="button" class="material-choice" data-material-choice="1">Metal<span>Brillo y armónicos.</span></button>
+                    <button type="button" class="material-choice" data-material-choice="2">Madera<span>Cuerpo medio cálido.</span></button>
+                    <button type="button" class="material-choice" data-material-choice="3">Cristal<span>Brillo limpio y resonante.</span></button>
+                    <button type="button" class="material-choice" data-material-choice="4">Agua<span>Movimiento orgánico.</span></button>
+                    <button type="button" class="material-choice" data-material-choice="5">Plasma<span>Energía y caos.</span></button>
+                </div>
+                <div class="macro-grid">
+                    <label class="macro-card" for="simple-character"><span class="macro-name">Carácter <b class="v" id="simple-character-v">Textura</b></span><small>De definido a nube densa.</small><input type="range" id="simple-character" min="0" max="100" value="35"></label>
+                    <label class="macro-card" for="simple-motion"><span class="macro-name">Movimiento <b class="v" id="simple-motion-v">Quieto</b></span><small>Hace respirar y desplazarse los rayos.</small><input type="range" id="simple-motion" min="0" max="100" value="0"></label>
+                    <label class="macro-card" for="simple-space"><span class="macro-name">Espacio <b class="v" id="simple-space-v">Cercano</b></span><small>Abre la cámara y sus reflexiones.</small><input type="range" id="simple-space" min="0" max="100" value="15"></label>
+                    <label class="macro-card" for="simple-volume"><span class="macro-name">Volumen <b class="v" id="simple-volume-v">80 %</b></span><small>Nivel de escucha, sin cambiar la escena.</small><input type="range" id="simple-volume" min="0" max="100" value="80"></label>
+                </div>
+                <div class="basic-summary" id="basic-summary">Vacío · textura definida · cámara cercana · sin movimiento.</div>
+            </section>
+
+            <!-- ── SHAPE ── -->
+            <section class="panel p-shape" data-workspace-panel="material">
+                <div class="panel-title"><span>Shape<span class="info-badge" tabindex="0">i<span class="info-tip">Carácter mueve a la vez apertura, duración y densidad de grano (Tonal → Textura → Drone). Volumen es solo la ganancia de escucha: no toca el motor.</span></span></span></div>
+                <div class="ctl">
+                    <label>Carácter (Tonal → Drone) <span class="v" id="char-v">—</span></label>
+                    <input type="range" id="char" min="0" max="100" value="35">
+                </div>
+                <div class="ctl">
+                    <label>Volumen <span class="v" id="vol-v">80 %</span></label>
+                    <input type="range" id="vol" min="0" max="100" value="80">
+                </div>
+            </section>
+
+            <!-- ── OPTICS ── -->
+            <section class="panel p-optics" data-workspace-panel="rays">
+                <div class="panel-title"><span>Optics<span class="info-badge" tabindex="0">i<span class="info-tip">Aberración separa graves/agudos en bandas con filtrado propio (efecto "lente"). Cola/Rebotes hace que un grano al morir relance un hijo cerca de donde cayó, N veces. Pitch transpone toda la nube en semitonos.</span></span></span></div>
+                <div class="ctl">
+                    <label>Aberración (graves anchos / agudos finos) <span class="v" id="aber-v">0 %</span></label>
+                    <input type="range" id="aber" min="0" max="100" value="0">
+                </div>
+                <div class="ctl">
+                    <label>Cola / Rebotes <span class="v" id="tail-v">0 %</span></label>
+                    <input type="range" id="tail" min="0" max="100" value="0">
+                </div>
+                <div class="ctl">
+                    <label>Pitch / Afinación (semitonos) <span class="v" id="pitch-v">0 st</span></label>
+                    <input type="range" id="pitch" min="-24" max="24" value="0" step="1">
+                </div>
+            </section>
+
+            <!-- ── SPACE ── -->
+            <section class="panel p-space" data-workspace-panel="space">
+                <div class="panel-title"><span>Space<span class="info-badge" tabindex="0">i<span class="info-tip">Estéreo dispersa los rayos. Octava/Shimmer eleva algunos en Drone. Reverb mezcla reflexiones de trayectorias: también procesa Original · Ray direct.</span></span></span></div>
+                <div class="ctl easy-width">
+                    <label>Estéreo (Width) <span class="v" id="width-v">0 %</span></label>
+                    <input type="range" id="width" min="0" max="100" value="0">
+                </div>
+                <div class="ctl easy-oct">
+                    <label>Octava / Shimmer <span class="v" id="oct-v">0 %</span></label>
+                    <input type="range" id="oct" min="0" max="100" value="0">
+                </div>
+                <div class="ctl easy-reverb">
+                    <label>Ambiente / Reverb <span class="v" id="reverb-v">0 %</span></label>
+                    <input type="range" id="reverb" min="0" max="100" value="0">
+                </div>
+            </section>
+
+            <!-- ── MATERIAL: el vocabulario propio de RayDrone ── -->
+            <section class="panel p-material" data-workspace-panel="material">
+                <div class="panel-title"><span>◇ Material sonoro<span class="info-badge" tabindex="0">i<span class="info-tip">El material modifica cada rayo, no solo un efecto al final: Metal abre armónicos, Madera concentra medios, Cristal prolonga resonancias, Agua mueve suavemente, Plasma aporta caos y Vacío lo deja intacto.</span></span></span><span>superficies que transforman rayos</span></div>
+                <div class="ctl">
+                    <label>Superficie <span class="v" id="material-v">Vacío</span></label>
+                    <div class="material-choices" role="group" aria-label="Material sonoro">
+                        <button type="button" class="material-choice active" data-material-choice="0">Vacío<span>Natural, sin color.</span></button>
+                        <button type="button" class="material-choice" data-material-choice="1">Metal<span>Brillo y armónicos.</span></button>
+                        <button type="button" class="material-choice" data-material-choice="2">Madera<span>Cuerpo medio cálido.</span></button>
+                        <button type="button" class="material-choice" data-material-choice="3">Cristal<span>Brillo limpio y resonante.</span></button>
+                        <button type="button" class="material-choice" data-material-choice="4">Agua<span>Movimiento orgánico.</span></button>
+                        <button type="button" class="material-choice" data-material-choice="5">Plasma<span>Energía y caos.</span></button>
+                    </div>
+                    <select id="material" hidden>
+                        <option value="0" selected>Vacío · energía intacta</option>
+                        <option value="1">Metal · armónicos brillantes</option>
+                        <option value="2">Madera · medios cálidos</option>
+                        <option value="3">Cristal · resonancia limpia</option>
+                        <option value="4">Agua · movimiento suave</option>
+                        <option value="5">Plasma · caos controlado</option>
+                    </select>
+                </div>
+                <div class="ctl">
+                    <label>Intensidad del material <span class="v" id="material-amount-v">100 %</span></label>
+                    <input type="range" id="material-amount" min="0" max="100" value="100">
+                </div>
+                <div class="sub">Piensa en una escena: una cámara de Cristal con superficies de Metal no se describe con parámetros de plugin; se compone con materiales.</div>
+            </section>
+
+            <!-- ── MOVEMENT + FX ── -->
+            <section class="panel p-motion" data-workspace-panel="space">
+                <div class="panel-title"><span>⌁ Movimiento y efectos<span class="info-badge" tabindex="0">i<span class="info-tip">LFO dibuja una trayectoria repetible; Envelope responde a la energía real de la salida. Delay, Chorus y Reverb forman la cadena espacial del motor.</span></span></span><span>modulación · espacio · deriva</span></div>
+                <div class="tune-filter">
+                    <div class="ctl"><label>Modulador <span class="v" id="mod-mode-v">OFF</span></label><select id="mod-mode"><option value="0" selected>OFF</option><option value="1">LFO triangular</option><option value="2">Envelope de salida</option></select></div>
+                    <div class="ctl"><label>Destino <span class="v" id="mod-target-v">Densidad</span></label><select id="mod-target"><option value="0" selected>Densidad de rayos</option><option value="1">Apertura</option><option value="2">Pitch</option></select></div>
+                    <div class="ctl pro-control"><label>Velocidad <span class="v" id="mod-rate-v">0.25 Hz</span></label><input type="range" id="mod-rate" min="0.01" max="12" value="0.25" step="0.01"></div>
+                    <div class="ctl"><label>Profundidad <span class="v" id="mod-depth-v">0 %</span></label><input type="range" id="mod-depth" min="0" max="100" value="0"></div>
+                    <div class="ctl pro-control"><label>Attack <span class="v" id="mod-attack-v">50 ms</span></label><input type="range" id="mod-attack" min="5" max="2000" value="50" step="5"></div>
+                    <div class="ctl pro-control"><label>Release <span class="v" id="mod-release-v">500 ms</span></label><input type="range" id="mod-release" min="10" max="4000" value="500" step="10"></div>
+                </div>
+                <div class="tune-filter">
+                    <div class="ctl"><label>Delay <span class="v" id="delay-v">0 %</span></label><input type="range" id="delay" min="0" max="100" value="0"></div>
+                    <div class="ctl pro-control"><label>Feedback delay <span class="v" id="delay-fb-v">28 %</span></label><input type="range" id="delay-fb" min="0" max="68" value="28"></div>
+                    <div class="ctl pro-control"><label>Tiempo delay <span class="v" id="delay-time-v">380 ms</span></label><input type="range" id="delay-time" min="20" max="1800" value="380" step="10"></div>
+                    <div class="ctl"><label>Chorus <span class="v" id="chorus-v">0 %</span></label><input type="range" id="chorus" min="0" max="100" value="0"></div>
+                    <div class="ctl pro-control"><label>Velocidad chorus <span class="v" id="chorus-rate-v">0.25 Hz</span></label><input type="range" id="chorus-rate" min="0.05" max="5" value="0.25" step="0.05"></div>
+                    <div class="ctl pro-control"><label>Profundidad chorus <span class="v" id="chorus-depth-v">8 ms</span></label><input type="range" id="chorus-depth" min="1" max="30" value="8"></div>
+                </div>
+                <div class="tune-filter pro-control">
+                    <div class="ctl"><label>Flanger · interferencia <span class="v" id="flanger-v">0 %</span></label><input type="range" id="flanger" min="0" max="100" value="0"></div>
+                    <div class="ctl"><label>Profundidad flanger <span class="v" id="flanger-depth-v">3 ms</span></label><input type="range" id="flanger-depth" min="0.1" max="15" value="3" step="0.1"></div>
+                    <div class="ctl"><label>Velocidad flanger <span class="v" id="flanger-rate-v">0.16 Hz</span></label><input type="range" id="flanger-rate" min="0.05" max="5" value="0.16" step="0.01"></div>
+                    <div class="ctl"><label>Phaser · cruces de fase <span class="v" id="phaser-v">0 %</span></label><input type="range" id="phaser" min="0" max="100" value="0"></div>
+                    <div class="ctl"><label>Profundidad phaser <span class="v" id="phaser-depth-v">50 %</span></label><input type="range" id="phaser-depth" min="0" max="100" value="50"></div>
+                    <div class="ctl"><label>Velocidad phaser <span class="v" id="phaser-rate-v">0.18 Hz</span></label><input type="range" id="phaser-rate" min="0.05" max="5" value="0.18" step="0.01"></div>
+                    <div class="ctl"><label>Convergencia / Drive <span class="v" id="drive-v">0 %</span></label><input type="range" id="drive" min="0" max="100" value="0"></div>
+                    <div class="ctl"><label>Resonador · objeto <span class="v" id="resonator-v">0 %</span></label><input type="range" id="resonator" min="0" max="100" value="0"></div>
+                    <div class="ctl"><label>Frecuencia resonador <span class="v" id="resonator-freq-v">440 Hz</span></label><input type="range" id="resonator-freq" min="60" max="2400" value="440" step="1"></div>
+                    <div class="ctl"><label>Decaimiento resonador <span class="v" id="resonator-decay-v">55 %</span></label><input type="range" id="resonator-decay" min="0" max="90" value="55"></div>
+                </div>
+            </section>
+
+            <!-- ── ENGINE ── -->
+            <section class="panel p-engine" data-workspace-panel="rays">
+                <div class="panel-title"><span>Engine<span class="info-badge" tabindex="0">i<span class="info-tip">Autoevolución: el nivel de salida realimenta el foco y la apertura, el render deriva solo. Muestreo suave (QMC) reparte los rayos en baja discrepancia en vez de al azar. Rayos inteligentes priorizan donde el sample tiene más energía.</span></span></span></div>
+                <div class="ctl">
+                    <label>Autoevolución (recursiva) <span class="v" id="evo-v">0 %</span></label>
+                    <input type="range" id="evo" min="0" max="100" value="0">
+                </div>
+                <div class="ctl">
+                    <label>Inertia del campo <span class="v" id="inertia-v">25 %</span></label>
+                    <input type="range" id="inertia" min="0" max="100" value="25" step="1">
+                    <div class="sub">Cuánto recuerda el Top-36 su estado anterior: bajo = mutable, alto = persistente.</div>
+                </div>
+                <div class="ctl row">
+                    <label>Muestreo suave (QMC) <span class="v" id="smooth-v">ON</span></label>
+                    <input type="checkbox" id="smooth" checked>
+                </div>
+                <div class="ctl row">
+                    <label>Rayos inteligentes (trazado inverso) <span class="v" id="smart-v">OFF</span></label>
+                    <input type="checkbox" id="smart">
+                </div>
+                <div id="perf" class="status">CPU audio — · rayos/bloque — · granos/s —<br>latencia: base — · salida —</div>
+            </section>
+
+            <!-- ── PLAY: piano por teclado / ratón / táctil ── -->
+            <section class="panel p-play" data-workspace-panel="tuning" data-access="professional">
+                <div class="panel-title"><span>Play<span class="info-badge" tabindex="0">i<span class="info-tip">Teclado A W S E D F T G Y U J K O L (desde C4) · clic/táctil sobre el piano · mantén varias a la vez para tocar acordes. D, F y A solo se tocan con clic/táctil (S/F/H ya son atajos de esta página). Mientras haya alguna nota sostenida, anula Microtonal y Voicing.</span></span></span><span>teclado · ratón · táctil</span></div>
+                <div class="ctl row octave-controls">
+                    <button class="preset" id="poct-down">OCT −</button>
+                    <span class="v" id="poct-v">+0</span>
+                    <button class="preset" id="poct-up">OCT +</button>
+                </div>
+                <div id="piano"></div>
+                <div class="sub">Teclado: <b>A W S E D F T G Y U J K O L</b> desde C4 (D, F y A solo por clic/táctil — S/F/H son atajos de espectro/pantalla completa/HUD). Suelta todas las teclas para volver a Microtonal/Voicing o al pitch continuo.</div>
+            </section>
+
+            <!-- ── AMBIENT (focos múltiples recursivos) ── -->
+            <section class="panel p-ambient adv" data-workspace-panel="rays" data-access="professional">
+                <div class="panel-title"><span>Ambient · focos recursivos<span class="info-badge" tabindex="0">i<span class="info-tip">Sustituye el foco único por una constelación de focos que derivan solos y engendran focos hijo más discretos → estructura auto-similar. Semillas = focos base · Recursión = niveles de hijos · Dispersión = distancia hijo↔padre · Deriva = velocidad · Nacimientos = focos nuevos/seg.</span></span></span><span>varios puntos focales auto-similares sobre la onda</span></div>
+                <div class="ctl row">
+                    <label>Activar tema ambient <span class="v" id="ambient-v">OFF</span></label>
+                    <input type="checkbox" id="ambient">
+                </div>
+                <div class="ambient-grid">
+                    <div class="ctl">
+                        <label>Semillas (focos base) <span class="v" id="aseeds-v">3</span></label>
+                        <input type="range" id="aseeds" min="1" max="8" value="3" step="1">
+                    </div>
+                    <div class="ctl">
+                        <label>Recursión (niveles del árbol) <span class="v" id="adepth-v">2</span></label>
+                        <input type="range" id="adepth" min="0" max="4" value="2" step="1">
+                    </div>
+                    <div class="ctl">
+                        <label>Dispersión (focos hijo) <span class="v" id="aspread-v">25 %</span></label>
+                        <input type="range" id="aspread" min="0" max="100" value="25">
+                    </div>
+                    <div class="ctl">
+                        <label>Deriva (movimiento de focos) <span class="v" id="adrift-v">30 %</span></label>
+                        <input type="range" id="adrift" min="0" max="100" value="30">
+                    </div>
+                    <div class="ctl">
+                        <label>Nacimientos (focos/seg) <span class="v" id="arate-v">40 %</span></label>
+                        <input type="range" id="arate" min="0" max="100" value="40">
+                    </div>
+                </div>
+                <div class="sub">Las semillas se reparten en baja discrepancia (golden ratio) y derivan solas; cada foco engendra focos hijo más breves y cercanos → estructura auto-similar (la misma ley QMC a escala de sección, frase y grano). Súbele a Reverb y grano largo para drone. Combínalo con autoevolución y rebotes.</div>
+            </section>
+
+            <!-- ── AFINACIÓN: voicing + retícula microtonal + filtro a tempo ── -->
+            <!-- (Fusión de los antiguos paneles "Tonalidad & Filtro" y "Microtonal":
+                 ambos deciden el pitch de cada rayo, así que viven juntos. Los IDs
+                 no cambian — el JS de siempre sigue funcionando tal cual.) -->
+            <section class="panel p-tune adv" data-workspace-panel="tuning" data-access="professional">
+                <div class="panel-title"><span>Afinación<span class="info-badge" tabindex="0">i<span class="info-tip">Decide el pitch de cada rayo, con prioridades claras: el piano (sección Play) manda mientras haya notas sostenidas; si no, el Voicing (acorde en entonación justa); si no, la Escala microtonal (12/19/22/24-EDO, justa o Bohlen–Pierce); si no, pitch continuo. Abajo, el filtro resonante con LFO sincronizado al BPM.</span></span></span><span>voicing · retícula microtonal · filtro a tempo</span></div>
+                <div class="micro-grid">
+                    <div>
+                        <div class="ctl">
+                            <label>Voicing (acorde afinado · core::music) <span class="v" id="voicing-v">Ninguno</span></label>
+                            <select id="voicing">
+                                <option value="" selected>Ninguno (usa la Escala de abajo)</option>
+                                <option value="2">Power pad · sub·raíz·5ª·8ª</option>
+                                <option value="1">Octavas</option>
+                                <option value="5">Quintas apiladas</option>
+                                <option value="3">Tríada mayor</option>
+                                <option value="4">Tríada menor</option>
+                                <option value="6">Sus2</option>
+                                <option value="7">Pentatónica</option>
+                                <option value="8">Escala mayor (justa)</option>
+                                <option value="9">Escala menor (justa)</option>
+                            </select>
+                        </div>
+                        <div class="ctl">
+                            <label>Escala (textura microtonal) <span class="v" id="scale-v">Libre</span></label>
+                            <select id="scale">
+                                <option value="off" selected>Libre (pitch continuo)</option>
+                                <option value="12edo">12-EDO · cromática</option>
+                                <option value="24edo">24-EDO · cuartos de tono</option>
+                                <option value="22edo">22-EDO · shruti</option>
+                                <option value="19edo">19-EDO</option>
+                                <option value="ji7">Justa entonación · 7 grados</option>
+                                <option value="bp">Bohlen–Pierce · 13 ÷ tritava</option>
+                            </select>
+                        </div>
+                        <div class="ctl">
+                            <label>Acorde (grados activos) <span class="v" id="chord-v">—</span></label>
+                            <select id="chord">
+                                <option value="cluster" selected>Cluster · todos los grados</option>
+                                <option value="tonic">Tónica (drone)</option>
+                                <option value="fifth">Tónica + quinta</option>
+                                <option value="triad">Tríada · 4:5:6</option>
+                                <option value="tetrad">Tétrada armónica · 4:5:6:7</option>
+                                <option value="penta">Pentatónica · 5 grados</option>
+                            </select>
+                        </div>
+                        <div class="sub">Voicing activo = pad consonante en entonación justa (anula la Escala). Con Escala + Acorde, cada temperamento afina los mismos intervalos a su manera (tercera: 400¢ en 12-EDO, 379¢ en 19-EDO, 386¢ justa). Ajusta la raíz con el slider <b>Pitch</b>.</div>
+                    </div>
+                    <canvas id="lattice" width="800" height="180"></canvas>
+                </div>
+                <div class="tune-filter">
+                    <div class="ctl">
+                        <label>Filtro · Cutoff <span class="v" id="cutoff-v">abierto</span></label>
+                        <input type="range" id="cutoff" min="0" max="100" value="100">
+                    </div>
+                    <div class="ctl">
+                        <label>Resonancia (baja Cutoff para oírla) <span class="v" id="reso-v">0 %</span></label>
+                        <input type="range" id="reso" min="0" max="100" value="0">
+                    </div>
+                    <div class="ctl">
+                        <label>Tempo (BPM del LFO) <span class="v" id="bpm-v">120</span></label>
+                        <input type="range" id="bpm" min="40" max="200" value="120" step="1">
+                    </div>
+                    <div class="ctl">
+                        <label>LFO · división <span class="v" id="lfodiv-v">1/4</span></label>
+                        <select id="lfodiv">
+                            <option value="0.25">1/16</option>
+                            <option value="0.5">1/8</option>
+                            <option value="1" selected>1/4</option>
+                            <option value="2">1/2</option>
+                            <option value="4">1 compás</option>
+                            <option value="8">2 compases</option>
+                        </select>
+                    </div>
+                    <div class="ctl">
+                        <label>LFO · profundidad (0 = off) <span class="v" id="lfodepth-v">0 oct</span></label>
+                        <input type="range" id="lfodepth" min="0" max="100" value="0">
+                    </div>
+                </div>
+                <div class="sub">El barrido del filtro va sincronizado al BPM (sube la profundidad del LFO para oírlo) y tiene recorrido aunque dejes el Cutoff totalmente abierto.</div>
+            </section>
+
+            <details class="analysis-zone" data-workspace-panel="analysis" data-access="professional">
+                <summary>
+                    <span>Análisis matemático</span>
+                    <small>Convergencia · modelos de efecto · telemetría WASM</small>
+                </summary>
+                <div class="analysis-content">
+            <!-- ── ANALYSIS / CONVERGENCE LAB ── -->
+            <section class="panel lab adv" data-workspace-panel="analysis" data-access="professional">
+                <div class="panel-title"><span>Convergence Lab<span class="info-badge" tabindex="0">i<span class="info-tip">Banco de pruebas offline (mismo motor Rust→wasm, en un Worker aparte): compara cómo cae el error de un grano estimado según el método de muestreo (aleatorio, estratificado, QMC, importance, reverse) al crecer N. No toca el render en vivo.</span></span></span><span>error RMS vs N · 1/√N · wasm</span></div>
+                <div class="sub">Prueba empírica con el motor real (Rust→wasm en un Worker, semilla fija → reproducible): el render converge al objetivo con error ~ 1/√N.</div>
+                <canvas id="lab-canvas" width="700" height="240"></canvas>
+                <button class="btn btn-play" id="lab-run">▶ Correr test de convergencia</button>
+                <div id="lab-readout" class="status">Carga un audio y corre el test.</div>
+                <div class="lab-ab">
+                    <button class="preset" id="lab-target" disabled>Objetivo</button>
+                    <button class="preset" id="lab-noisy" disabled>N=4</button>
+                    <button class="preset" id="lab-clean" disabled>N=256</button>
+                    <button class="preset" id="lab-stop" disabled>■ Stop</button>
+                    <button class="preset" id="lab-csv" disabled>⬇ CSV</button>
+                </div>
+            </section>
+
+            <!-- ── COMPARATIVA: datos reales del motor, no promesas ── -->
+            <section class="panel p-compare adv" data-workspace-panel="analysis" data-access="professional">
+                <div class="panel-title"><span>◫ Comparativa de FX<span class="info-badge" tabindex="0">i<span class="info-tip">RayDrone muestra telemetría del AudioWorklet real. La columna convencional describe la topología habitual; no inventamos CPU o memoria que el navegador no expone.</span></span></span><span>convencional vs trayectorias RayDrone</span></div>
+                <div class="ctl compare-selector"><label>Familia a comparar</label><select id="compare-fx"><option value="delay">Delay</option><option value="reverb">Reverb</option><option value="chorus">Chorus / Ensemble</option><option value="flanger">Flanger / Phaser</option><option value="resonator">Resonador</option></select></div>
+                <div class="compare-grid">
+                    <div class="compare-card"><h3>FX convencional</h3><div id="compare-normal">Delay-line / filtros fijos.</div><div class="compare-metric"><span>CPU y memoria</span><b>depende del host</b></div><div class="compare-metric"><span>Modelo</span><b>parámetros aislados</b></div></div>
+                    <div class="compare-card"><h3>RayDrone</h3><div id="compare-ray">Trayectorias, pérdidas e interferencia.</div><div class="compare-metric"><span>CPU audio</span><b id="compare-cpu">—</b></div><div class="compare-metric"><span>Voces / rayos</span><b id="compare-voices">—</b></div><div class="compare-metric"><span>Granos / s</span><b id="compare-grains">—</b></div></div>
+                    <div class="compare-card"><h3>Lectura sonora</h3><div id="compare-note">Selecciona una familia para ver qué cambia cuando el efecto nace de la escena.</div><button class="preset" id="compare-refresh">Actualizar telemetría</button></div>
+                </div>
+            </section>
+                </div>
+            </details>
+
+        </div>
+    </div>
+
+    <script>
+    const $ = (id) => document.getElementById(id);
+    const fileInput = $('file'), fileLabel = $('file-label'), playBtn = $('play'), statusEl = $('status');
+    const charSlider = $('char'), charV = $('char-v'), volSlider = $('vol'), volV = $('vol-v');
+    const smoothChk = $('smooth'), smoothV = $('smooth-v');
+    const aberSlider = $('aber'), aberV = $('aber-v');
+    const tailSlider = $('tail'), tailV = $('tail-v');
+    const evoSlider = $('evo'), evoV = $('evo-v');
+    const inertiaSlider = $('inertia'), inertiaV = $('inertia-v');
+    const widthSlider = $('width'), widthV = $('width-v');
+    const octSlider = $('oct'), octV = $('oct-v');
+    const pitchSlider = $('pitch'), pitchV = $('pitch-v');
+    const scaleSel = $('scale'), scaleV = $('scale-v');
+    const chordSel = $('chord'), chordV = $('chord-v');
+    const reverbSlider = $('reverb'), reverbV = $('reverb-v');
+    const materialSel = $('material'), materialV = $('material-v'), materialAmount = $('material-amount'), materialAmountV = $('material-amount-v');
+    const modMode = $('mod-mode'), modModeV = $('mod-mode-v'), modTarget = $('mod-target'), modTargetV = $('mod-target-v');
+    const modRate = $('mod-rate'), modRateV = $('mod-rate-v'), modDepth = $('mod-depth'), modDepthV = $('mod-depth-v');
+    const modAttack = $('mod-attack'), modAttackV = $('mod-attack-v'), modRelease = $('mod-release'), modReleaseV = $('mod-release-v');
+    const delay = $('delay'), delayV = $('delay-v'), delayFb = $('delay-fb'), delayFbV = $('delay-fb-v'), delayTime = $('delay-time'), delayTimeV = $('delay-time-v');
+    const chorus = $('chorus'), chorusV = $('chorus-v'), chorusRate = $('chorus-rate'), chorusRateV = $('chorus-rate-v'), chorusDepth = $('chorus-depth'), chorusDepthV = $('chorus-depth-v');
+    const flanger = $('flanger'), flangerV = $('flanger-v'), flangerRate = $('flanger-rate'), flangerRateV = $('flanger-rate-v'), flangerDepth = $('flanger-depth'), flangerDepthV = $('flanger-depth-v');
+    const phaser = $('phaser'), phaserV = $('phaser-v'), phaserRate = $('phaser-rate'), phaserRateV = $('phaser-rate-v'), phaserDepth = $('phaser-depth'), phaserDepthV = $('phaser-depth-v');
+    const drive = $('drive'), driveV = $('drive-v'), resonator = $('resonator'), resonatorV = $('resonator-v'), resonatorFreq = $('resonator-freq'), resonatorFreqV = $('resonator-freq-v'), resonatorDecay = $('resonator-decay'), resonatorDecayV = $('resonator-decay-v');
+    const voicingSel = $('voicing'), voicingV = $('voicing-v');
+    const cutoffSlider = $('cutoff'), cutoffV = $('cutoff-v');
+    const resoSlider = $('reso'), resoV = $('reso-v');
+    const bpmSlider = $('bpm'), bpmV = $('bpm-v');
+    const lfodivSel = $('lfodiv'), lfodivV = $('lfodiv-v');
+    const lfodepthSlider = $('lfodepth'), lfodepthV = $('lfodepth-v');
+    const smartChk = $('smart'), smartV = $('smart-v');
+    const ambientChk = $('ambient'), ambientV = $('ambient-v');
+    const aseedsS = $('aseeds'), adepthS = $('adepth'), aspreadS = $('aspread'), adriftS = $('adrift'), arateS = $('arate');
+    const meterFill = $('meter-fill');
+    const perfEl = $('perf');
+    const recBtn = $('rec');
+    const presets = Array.from(document.querySelectorAll('#scene-presets .preset'));
+    const waveCanvas = $('wave'), wctx = waveCanvas.getContext('2d');
+    const outCanvas = $('outwave'), octx = outCanvas.getContext('2d');
+    const zoomSlider = $('zoom'), zoomV = $('zoom-v');
+    const latCanvas = $('lattice'), lctx = latCanvas.getContext('2d');
+    // La paleta de los canvas se lee de los mismos tokens CSS que pintan la UI.
+    // Así el cambio de tema no se queda solo en las tarjetas y controles.
+    let canvasTheme = {};
+    function refreshCanvasTheme() {
+        const styles = getComputedStyle(document.documentElement);
+        const read = (name, fallback) => styles.getPropertyValue(name).trim() || fallback;
+        canvasTheme = {
+            bg: read('--surface-3', '#07080e'),
+            surface: read('--surface', '#11131a'),
+            line: read('--line', 'rgba(215,226,255,.10)'),
+            lineStrong: read('--line-strong', 'rgba(255,93,126,.32)'),
+            accent: read('--accent', '#ff3f68'),
+            accent2: read('--accent-2', '#55d6c2'),
+            'accent-2': read('--accent-2', '#55d6c2'),
+            accentSoft: read('--accent-soft', 'rgba(255,63,104,.14)'),
+            text: read('--text', '#f3edf0'),
+            muted: read('--muted', '#a8b3c7'),
+            focus: read('--focus', '#ffd166')
+        };
+        canvasTheme.accentRgb = canvasRgb(canvasTheme.accent);
+        canvasTheme.accent2Rgb = canvasRgb(canvasTheme.accent2);
+        canvasTheme.focusRgb = canvasRgb(canvasTheme.focus);
+        canvasTheme.textRgb = canvasRgb(canvasTheme.text);
+        canvasTheme.bands = [canvasTheme.accent2Rgb, canvasTheme.accentRgb, canvasTheme.focusRgb];
+    }
+    function canvasRgba(color, alpha) {
+        const hex = String(color || '').trim().match(/^#([0-9a-f]{3,8})$/i);
+        if (hex) {
+            let h = hex[1];
+            if (h.length === 3 || h.length === 4) h = h.split('').map(ch => ch + ch).join('');
+            const rgb = [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+            return `rgba(${rgb.join(',')},${alpha})`;
+        }
+        const rgb = String(color || '').match(/rgba?\(([^)]+)\)/i);
+        if (rgb) return `rgba(${rgb[1].split(',').slice(0, 3).map(v => v.trim()).join(',')},${alpha})`;
+        return color || `rgba(255,255,255,${alpha})`;
+    }
+    function canvasRgb(color) {
+        const match = canvasRgba(color, 1).match(/rgba?\(([^)]+)\)/i);
+        return match ? match[1].split(',').slice(0, 3).map(v => Number(v.trim()) || 0) : [255, 255, 255];
+    }
+    const canvasColor = (name, alpha) => canvasRgba(canvasTheme[name], alpha);
+    refreshCanvasTheme();
+    window.addEventListener('raydrone:theme', refreshCanvasTheme);
+    const environmentButtons = Array.from(document.querySelectorAll('.environment-switch button[data-environment]'));
+    const materialChoices = Array.from(document.querySelectorAll('[data-material-choice]'));
+    const simpleCharacter = $('simple-character'), simpleCharacterV = $('simple-character-v');
+    const simpleMotion = $('simple-motion'), simpleMotionV = $('simple-motion-v');
+    const simpleSpace = $('simple-space'), simpleSpaceV = $('simple-space-v');
+    const simpleVolume = $('simple-volume'), simpleVolumeV = $('simple-volume-v');
+    const basicSummary = $('basic-summary');
+    const compareFx = $('compare-fx'), compareNormal = $('compare-normal'), compareRay = $('compare-ray'), compareNote = $('compare-note');
+    const compareCpu = $('compare-cpu'), compareVoices = $('compare-voices'), compareGrains = $('compare-grains');
+
+    let ctx = null, jsGain = null, node = null, wasmBytes = null;
+    let analyser = null, freqData = null, timeData = null; // espectro FFT + osciloscopio de la salida real
+    let sampleData = null, sampleRate = 44100, duration = 0;
+    let focusSec = 0, mode = 'drone', isPlaying = false;
+    let wavePeaks = null;   // pico por pixel (precalculado al cargar)
+    let waveEnergy = null;  // RMS por pixel para distinguir cuerpo y transitorios
+    let visRays = [];       // rayos a dibujar (posiciones de granos reales)
+    let latestFoci = null;  // constelación de focos en ambient: [pos0, w0, pos1, w1, …]
+    let latestPerf = null;
+
+    async function fetchArrayBuffer(url, opts = {}) {
+        const res = await fetch(url, opts);
+        if (!res.ok) throw new Error(`${url} respondio ${res.status}`);
+        return await res.arrayBuffer();
+    }
+
+    // ── Mapeo del knob Carácter → parámetros del motor ──────────────────────
+    function paramsFromChar() {
+        const t = clamp(parseFloat(charSlider.value) / 100, 0, 1);
+        const aperture = 0.02 + t * t * 0.6;          // 20 ms .. 620 ms
+        const grainMs  = 80 + t * 120;                 // 80 .. 200 ms
+        const grainRate = 140 + t * 260;               // 140 .. 400 granos/s
+        const concurrency = Math.max(1, grainRate * grainMs / 1000);
+        // Nivel pleno (como el drone por defecto, que suena lleno) pero escalando con la
+        // densidad. El soft-clip del motor le da cuerpo sin distorsionar en exceso.
+        const gain = clamp(1.5 / Math.sqrt(concurrency), 0, 0.5);
+        return { focus: focusSec, aperture, grainMs, grainRate, gain, master: 1.0 };
+    }
+    const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
+
+    function sendParams(active) {
+        if (!node) return;
+        const p = paramsFromChar();
+        if (!active) p.grainRate = 0; // motor en silencio (las voces se apagan solas)
+        node.port.postMessage({ type: 'params', ...p });
+    }
+
+    function sendFx() {
+        if (!node) return;
+        const aber = parseFloat(aberSlider.value) / 100;
+        const tail = parseFloat(tailSlider.value) / 100;
+        const bounces = Math.round(tail * 4);        // 0..4 rebotes
+        const refl = 0.35 + tail * 0.5;              // 0.35..0.85 supervivencia
+        const feedback = parseFloat(evoSlider.value) / 100;
+        node.port.postMessage({ type: 'fx', aber, bounces, refl, feedback });
+    }
+
+    function sendInertia() {
+        if (!node) return;
+        node.port.postMessage({ type: 'top36inertia', value: parseFloat(inertiaSlider.value) / 100 });
+    }
+
+    function sendSpace() {
+        if (!node) return;
+        node.port.postMessage({
+            type: 'space',
+            width: parseFloat(widthSlider.value) / 100,
+            oct: parseFloat(octSlider.value) / 100,
+        });
+    }
+
+    function sendPitch() {
+        if (!node) return;
+        const semis = parseFloat(pitchSlider.value);
+        node.port.postMessage({ type: 'pitch', mult: Math.pow(2, semis / 12) });
+    }
+
+    function sendReverb() {
+        if (!node) return;
+        node.port.postMessage({ type: 'reverb', wet: parseFloat(reverbSlider.value) / 100 });
+    }
+
+    function sendMaterial() {
+        if (!node) return;
+        node.port.postMessage({ type: 'material', kind: parseInt(materialSel.value, 10), amount: parseFloat(materialAmount.value) / 100 });
+    }
+    function sendModulation() {
+        if (!node) return;
+        node.port.postMessage({ type: 'modulation', mode: parseInt(modMode.value, 10), target: parseInt(modTarget.value, 10), rate: parseFloat(modRate.value), depth: parseFloat(modDepth.value) / 100, attack: parseFloat(modAttack.value) / 1000, release: parseFloat(modRelease.value) / 1000 });
+    }
+    function sendEffects() {
+        if (!node) return;
+        node.port.postMessage({ type: 'effects', delayWet: parseFloat(delay.value) / 100, delayTime: parseFloat(delayTime.value) / 1000, delayFeedback: parseFloat(delayFb.value) / 100, chorusWet: parseFloat(chorus.value) / 100, chorusRate: parseFloat(chorusRate.value), chorusDepth: parseFloat(chorusDepth.value) / 1000 });
+    }
+    function sendAdvancedEffects() {
+        if (!node) return;
+        node.port.postMessage({ type: 'advancedfx', flangerWet: parseFloat(flanger.value) / 100, flangerRate: parseFloat(flangerRate.value), flangerDepth: parseFloat(flangerDepth.value) / 1000, phaserWet: parseFloat(phaser.value) / 100, phaserRate: parseFloat(phaserRate.value), phaserDepth: parseFloat(phaserDepth.value) / 100, drive: parseFloat(drive.value) / 100, resonatorWet: parseFloat(resonator.value) / 100, resonatorHz: parseFloat(resonatorFreq.value), resonatorDecay: parseFloat(resonatorDecay.value) / 100 });
+    }
+
+    // ── Tonalidad: un voicing afinado (core::music vía set_chord) tiene prioridad
+    // sobre la rejilla Microtonal; "Ninguno" devuelve el control al panel Microtonal.
+    function applyTonality() {
+        if (!node) return;
+        if (voicingSel.value) {
+            node.port.postMessage({ type: 'chord', preset: parseInt(voicingSel.value, 10) });
+        } else {
+            sendScale();
+        }
+    }
+
+    // Cutoff: slider 0..99 mapea 80 Hz..18 kHz exponencial; 100 = abierto (bypass).
+    function cutoffHz() {
+        const v = parseFloat(cutoffSlider.value);
+        return v >= 100 ? 22050 : 80 * Math.pow(18000 / 80, v / 100);
+    }
+    function sendFilter() {
+        if (!node) return;
+        node.port.postMessage({ type: 'filter', cutoff: cutoffHz(), res: parseFloat(resoSlider.value) / 100 });
+    }
+    // LFO sincronizado: división de nota (en negras) + BPM → frecuencia de barrido.
+    function sendFilterLfo() {
+        if (!node) return;
+        const bpm = parseFloat(bpmSlider.value);
+        const beats = parseFloat(lfodivSel.value);     // negras por ciclo
+        const rate = bpm / (60 * beats);                // ciclos por segundo
+        const depth = parseFloat(lfodepthSlider.value) / 100 * 4; // 0..4 octavas
+        node.port.postMessage({ type: 'filterlfo', rate, depth });
+    }
+
+    // ── Escalas microtonales: ratios de un período (octava o tritava) ──────
+    function scaleRatios(kind) {
+        const edo = (n, period = 2) => Array.from({ length: n }, (_, i) => Math.pow(period, i / n));
+        switch (kind) {
+            case '12edo': return edo(12);
+            case '24edo': return edo(24);
+            case '22edo': return edo(22);
+            case '19edo': return edo(19);
+            case 'ji7':   return [1, 9 / 8, 5 / 4, 4 / 3, 3 / 2, 5 / 3, 15 / 8]; // mayor justa
+            case 'bp':    return edo(13, 3); // Bohlen–Pierce: 13 divisiones iguales de la tritava 3:1
+            default:      return []; // tabla vacía = pitch continuo (sin retícula)
+        }
+    }
+    // Acorde = subconjunto de grados. Con TODOS los grados activos cualquier EDO
+    // denso suena a cluster cromático y los temperamentos no se distinguen; al
+    // restringir a un acorde, cada escala afina sus intervalos a su manera y la
+    // diferencia 12/19/22-EDO/justa se vuelve audible. Para cada ratio objetivo
+    // se elige el grado más cercano de la escala (en cents).
+    function chordTargets(kind, scaleKind) {
+        const bp = scaleKind === 'bp'; // BP: el acorde canónico es 3:5:7 en la tritava
+        switch (kind) {
+            case 'tonic':  return [1];
+            case 'fifth':  return bp ? [1, 5 / 3] : [1, 3 / 2];
+            case 'triad':  return bp ? [1, 5 / 3, 7 / 3] : [1, 5 / 4, 3 / 2];
+            case 'tetrad': return bp ? [1, 5 / 3, 9 / 5, 7 / 3] : [1, 5 / 4, 3 / 2, 7 / 4];
+            default:       return null; // cluster: todos los grados
+        }
+    }
+    function activeRatios() {
+        const all = scaleRatios(scaleSel.value);
+        if (!all.length) return all;
+        const kind = chordSel.value;
+        if (kind === 'penta') { // 5 grados equiespaciados dentro de la escala
+            const out = [];
+            for (let i = 0; i < 5; i++) out.push(all[Math.round(i * all.length / 5) % all.length]);
+            return [...new Set(out)].sort((a, b) => a - b);
+        }
+        const targets = chordTargets(kind, scaleSel.value);
+        if (!targets) return all;
+        const pick = targets.map((t) =>
+            all.reduce((best, r) => Math.abs(Math.log(r / t)) < Math.abs(Math.log(best / t)) ? r : best, all[0]));
+        return [...new Set(pick)].sort((a, b) => a - b);
+    }
+    function updateScaleLabels() {
+        const all = scaleRatios(scaleSel.value);
+        const act = activeRatios();
+        scaleV.innerText = all.length ? `${all.length} grados` : 'Libre';
+        chordV.innerText = all.length ? `${act.length} de ${all.length}` : '—';
+    }
+    function sendScale() {
+        if (!node) return;
+        node.port.postMessage({ type: 'scale', data: Float32Array.from(activeRatios()) });
+    }
+
+    function sendSmart() {
+        if (!node) return;
+        node.port.postMessage({ type: 'smart', on: smartChk.checked ? 1 : 0 });
+    }
+
+    function sendAmbient() {
+        if (!node) return;
+        node.port.postMessage({
+            type: 'ambient',
+            on: ambientChk.checked ? 1 : 0,
+            seeds: parseInt(aseedsS.value, 10),
+            depth: parseInt(adepthS.value, 10),
+            spread: parseFloat(aspreadS.value) / 100,
+            drift: parseFloat(adriftS.value) / 100,
+            rate: parseFloat(arateS.value) / 100 * 2, // 0..2 nacimientos/seg
+        });
+    }
+
+    function charWord() {
+        const t = parseFloat(charSlider.value) / 100;
+        const key = t < 0.34 ? 'Tonal' : t < 0.67 ? 'Textura' : 'Drone';
+        return rayI18n.t(key);
+    }
+
+    // ── Motor (lazy): AudioContext + worklet + módulo wasm ──────────────────
+    async function ensureEngine() {
+        if (!ctx) {
+            ctx = new (window.AudioContext || window.webkitAudioContext)();
+            jsGain = ctx.createGain();
+            jsGain.gain.value = parseFloat(volSlider.value) / 100;
+            jsGain.connect(ctx.destination);
+            // Tap pasivo para el espectro FFT (no altera la salida).
+            analyser = ctx.createAnalyser();
+            analyser.fftSize = 1024;
+            analyser.smoothingTimeConstant = 0.8;
+            freqData = new Uint8Array(analyser.frequencyBinCount);
+            timeData = new Float32Array(analyser.fftSize);
+            jsGain.connect(analyser);
+        }
+        // OJO iOS: resume() fuera de un gesto directo del usuario (p.ej. el
+        // 'change' del selector de archivos) deja la promesa pendiente para
+        // siempre y la UI se queda en "Decodificando…". No bloquear aquí;
+        // play() y labPlay() reintentan dentro de su click, que sí es gesto.
+        if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+        if (!ctx.audioWorklet) {
+            // Sin HTTPS (o localhost) los navegadores no exponen AudioWorklet.
+            // Típico al abrir desde el móvil por IP de la red local en HTTP.
+            throw new Error(`AudioWorklet no disponible en ${location.origin}: hace falta HTTPS o localhost.`);
+        }
+        if (!wasmBytes) {
+            // Cache-bust ambos: raydrone.wasm es un binario que recompilas en
+            // local (wasm/build.sh) y no está versionado en git, así que el
+            // navegador puede estar sirviendo una copia vieja aunque el HTML
+            // ya esté al día — un `git pull` nunca invalida la caché HTTP. La
+            // marca de tiempo obliga a pedirlos de red cada carga de página.
+            const bust = `?v=${Date.now()}`;
+            // No compilamos aquí: Safari no puede clonar un WebAssembly.Module
+            // hacia el worklet (DataCloneError); le pasamos los bytes y compila él.
+            wasmBytes = await fetchArrayBuffer('raydrone.wasm' + bust, { cache: 'no-store' });
+            await ctx.audioWorklet.addModule('processor.js' + bust);
+        }
+        if (!node) {
+            node = new AudioWorkletNode(ctx, 'raydrone', {
+                numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2],
+                processorOptions: { wasmBytes },
+            });
+            node.onprocessorerror = () => {
+                statusEl.innerText = rayI18n.t('Error en el motor de audio (worklet). Mira la consola.');
+            };
+            node.connect(jsGain);
+            node.port.onmessage = (e) => {       // rayos + nivel + perf + grabación desde el worklet
+                const d = e.data;
+                if (d.type === 'rays') { pushRays(d.offsets, d.bands, d.ratios); setMeter(d.level); if (d.foci !== undefined) latestFoci = d.foci; }
+                else if (d.type === 'level') { setMeter(d.level); if (d.foci !== undefined) latestFoci = d.foci; }
+                else if (d.type === 'recdata') handleRecordingChunk(d);
+                else if (d.type === 'sampleinfo' && d.truncated) {
+                    if (sampleData && sampleData.length === d.total) {
+                        sampleData = sampleData.subarray(0, d.used);
+                        duration = d.used / sampleRate;
+                        focusSec = clamp(focusSec, 0, duration);
+                        computePeaks();
+                    }
+                    statusEl.innerText = `⚠ Sample truncado a ${(d.used / sampleRate).toFixed(0)} s (capacidad del motor). La onda muestra solo la parte que puede sonar.`;
+                }
+                else if (d.type === 'enginemismatch') {
+                    // El .wasm cargado no reconoce un mensaje que el JS ya manda —
+                    // típico de haber tirado de git sin recompilar raydrone.wasm
+                    // (no está versionado; hay que correr wasm/build.sh).
+                    statusEl.innerText = `⚠ El motor (.wasm) no reconoce "${d.messageType}" — recompílalo con: bash wasm/build.sh (git pull no actualiza el binario compilado). Detalle: ${d.error}`;
+                    console.error('enginemismatch:', d.messageType, d.error);
+                }
+                if (d.perf) updatePerf(d.perf);
+            };
+            // LUT de ventana Hann (JS sí tiene Math.cos)
+            const win = new Float32Array(2048);
+            for (let i = 0; i < 2048; i++) win[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / 2047));
+            node.port.postMessage({ type: 'window', data: win });
+            node.port.postMessage({ type: 'mode', value: smoothChk.checked ? 1 : 0 });
+            sendFx();
+            sendInertia();
+            sendSpace();
+            sendPitch();
+            sendReverb();
+            sendMaterial();
+            sendModulation();
+            sendEffects();
+            sendAdvancedEffects();
+            sendSmart();
+            applyTonality();
+            sendFilter();
+            sendFilterLfo();
+            sendAmbient();
+        }
+        if (sampleData) {
+            node.port.postMessage({ type: 'sample', data: sampleData, sampleRate });
+        }
+    }
+
+    let audioLoadToken = 0;
+    async function loadAudioBuffer(raw, sourceName, token) {
+        // Forma con callbacks: las versiones de Safari sin la forma promesa
+        // de decodeAudioData también funcionan así.
+        const buf = await new Promise((res, rej) => ctx.decodeAudioData(raw, res, rej));
+        if (token !== audioLoadToken) return false;
+
+        // Downmix a mono promediando TODOS los canales (antes se tiraba el canal R)
+        sampleData = new Float32Array(buf.length);
+        for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+            const d = buf.getChannelData(ch);
+            for (let i = 0; i < d.length; i++) sampleData[i] += d[i];
+        }
+        if (buf.numberOfChannels > 1) {
+            const inv = 1 / buf.numberOfChannels;
+            for (let i = 0; i < sampleData.length; i++) sampleData[i] *= inv;
+        }
+        sampleRate = buf.sampleRate;
+        duration = buf.duration;
+        focusSec = duration * 0.3;
+        node.port.postMessage({ type: 'sample', data: sampleData, sampleRate });
+        sendParams(false); // silencio hasta que se pulse Play (el motor arranca con rate=0)
+        computePeaks();
+        playBtn.disabled = false;
+        playBtn.innerText = rayI18n.t('▶ Play');
+        recBtn.disabled = false;
+        fileLabel.innerText = `✔ ${sourceName.substring(0, 26)}`;
+        statusEl.innerText = `Audio listo · ${duration.toFixed(2)} s · click en la onda para mover el foco`;
+        return true;
+    }
+
+    async function loadDefaultAudio() {
+        const token = ++audioLoadToken;
+        statusEl.innerText = 'Cargando audio por defecto…';
+        try {
+            await ensureEngine();
+            const raw = await fetchArrayBuffer('data/default.mp3', { cache: 'no-store' });
+            await loadAudioBuffer(raw, 'default.mp3', token);
+        } catch (err) {
+            if (token !== audioLoadToken) return;
+            statusEl.innerText = 'No se pudo cargar data/default.mp3. Sube otro archivo para empezar.';
+            console.error(err);
+        }
+    }
+
+    // ── Carga de audio ──────────────────────────────────────────────────
+    fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const token = ++audioLoadToken;
+        statusEl.innerText = rayI18n.t('Decodificando…');
+        try {
+            await ensureEngine();
+        } catch (err) {
+            statusEl.innerText = `${rayI18n.t('Error al iniciar el motor:')} ${(err && err.message) || err}`;
+            console.error(err);
+            return;
+        }
+        try {
+            const raw = await file.arrayBuffer();
+            await loadAudioBuffer(raw, file.name, token);
+        } catch (err) {
+            if (token !== audioLoadToken) return;
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            const safariNoCodec = ['ogg', 'oga', 'opus', 'webm'].includes(ext);
+            statusEl.innerText = safariNoCodec
+                ? `Safari no decodifica .${ext}. Prueba con WAV, MP3, AAC/M4A o FLAC.`
+                : 'Error al decodificar el audio. Prueba con WAV, MP3 o AAC/M4A.';
+            console.error(err);
+        }
+    });
+
+    const scheduleDefaultAudio = window.requestIdleCallback
+        ? (cb) => requestIdleCallback(cb, { timeout: 1200 })
+        : (cb) => setTimeout(cb, 0);
+    scheduleDefaultAudio(() => { if (!sampleData) loadDefaultAudio(); });
+
+    // ── Transporte ──────────────────────────────────────────────────────
+    function stopDry() {
+        if (node) node.port.postMessage({ type: 'direct', on: 0, offsetSec: 0 });
+    }
+    function startDry() {
+        stopDry();
+        // Original es un rayo directo dentro del WASM: no hay ruta paralela.
+        sendParams(false);
+        node.port.postMessage({ type: 'direct', on: 1, offsetSec: focusSec });
+    }
+    function stopAll() { stopDry(); sendParams(false); }
+
+    async function play() {
+        await ensureEngine();
+        // Aquí sí estamos dentro de un click: iOS permite arrancar el audio.
+        if (ctx.state !== 'running') { try { await ctx.resume(); } catch (_) {} }
+        isPlaying = true;
+        playBtn.innerText = rayI18n.t('⏸ Pause');
+        if (mode === 'dry') startDry();
+        else sendParams(true);
+    }
+    function stop() {
+        isPlaying = false;
+        playBtn.innerText = rayI18n.t('▶ Play');
+        stopAll();
+    }
+
+    playBtn.addEventListener('click', () => { isPlaying ? stop() : play(); });
+
+    presets.forEach((btn) => {
+        btn.addEventListener('click', () => {
+            presets.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            mode = btn.dataset.mode;
+            if (btn.dataset.t !== undefined) {
+                charSlider.value = Math.round(parseFloat(btn.dataset.t) * 100);
+                charV.innerText = charWord();
+            }
+            if (btn.dataset.aber !== undefined) {
+                aberSlider.value = btn.dataset.aber; aberV.innerText = `${btn.dataset.aber} %`;
+                tailSlider.value = btn.dataset.tail; tailV.innerText = `${btn.dataset.tail} %`;
+                evoSlider.value = btn.dataset.evo;   evoV.innerText = `${btn.dataset.evo} %`;
+                widthSlider.value = btn.dataset.width; widthV.innerText = `${btn.dataset.width} %`;
+                octSlider.value = btn.dataset.oct;     octV.innerText = `${btn.dataset.oct} %`;
+                reverbSlider.value = btn.dataset.reverb; reverbV.innerText = `${btn.dataset.reverb} %`;
+            }
+            sendFx();
+            sendSpace();
+            sendReverb();
+            if (isPlaying) {            // aplicar el cambio al vuelo
+                stopAll();
+                if (mode === 'dry') startDry(); else sendParams(true);
+            }
+        });
+    });
+
+    charSlider.addEventListener('input', () => {
+        charV.innerText = charWord();
+        simpleCharacter.value = charSlider.value;
+        simpleCharacterV.textContent = charWord();
+        if (mode === 'dry') {           // tocar el carácter = quieres el motor
+            mode = 'drone';
+            presets.forEach(b => b.classList.toggle('active', b.dataset.mode === 'drone'));
+            if (isPlaying) { stopDry(); sendParams(true); }
+        } else if (isPlaying) {
+            sendParams(true);
+        }
+    });
+
+    volSlider.addEventListener('input', () => {
+        volV.innerText = `${volSlider.value} %`;
+        simpleVolume.value = volSlider.value;
+        simpleVolumeV.textContent = `${volSlider.value} %`;
+        if (jsGain) jsGain.gain.value = parseFloat(volSlider.value) / 100;
+    });
+
+    function setEnvironment(level) {
+        if (!['basic', 'medium', 'professional'].includes(level)) level = 'medium';
+        document.body.dataset.environment = level;
+        environmentButtons.forEach((b) => {
+            const active = b.dataset.environment === level;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        if (level === 'basic') {
+            // Reflejar el estado avanzado sin reescribirlo: pasar a Básico no
+            // cambia el sonido, solo lo resume en cuatro gestos.
+            simpleCharacter.value = charSlider.value;
+            simpleCharacterV.textContent = charWord();
+            simpleVolume.value = volSlider.value;
+            simpleVolumeV.textContent = `${volSlider.value} %`;
+            const spaceEstimate = ((parseFloat(reverbSlider.value) / 0.72) + (parseFloat(widthSlider.value) / 0.78)) * 0.5;
+            simpleSpace.value = Math.round(clamp(spaceEstimate, 0, 100));
+            simpleSpaceV.textContent = spaceWord(parseFloat(simpleSpace.value));
+            const motionEstimate = Math.max(parseFloat(modDepth.value) / 0.45, parseFloat(chorus.value) / 0.22);
+            simpleMotion.value = Math.round(clamp(motionEstimate, 0, 100));
+            simpleMotionV.textContent = motionWord(parseFloat(simpleMotion.value));
+        }
+        updateBasicSummary();
+    }
+    environmentButtons.forEach((b) => b.addEventListener('click', () => setEnvironment(b.dataset.environment)));
+    setEnvironment('basic');
+
+    function motionWord(v) { return rayI18n.t(v < 8 ? 'Quieto' : v < 42 ? 'Fluido' : v < 76 ? 'Vivo' : 'Inestable'); }
+    function spaceWord(v) { return rayI18n.t(v < 18 ? 'Cercano' : v < 48 ? 'Sala' : v < 78 ? 'Cámara' : 'Inmenso'); }
+    function syncMaterialChoices() {
+        materialChoices.forEach((b) => {
+            const active = b.dataset.materialChoice === materialSel.value;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+    }
+    function updateBasicSummary() {
+        const materialKeys = ['Vacío', 'Metal', 'Madera', 'Cristal', 'Agua', 'Plasma'];
+        const materialName = rayI18n.t(materialKeys[parseInt(materialSel.value, 10)] || 'Vacío');
+        basicSummary.textContent = `${materialName} · ${charWord().toLowerCase()} · ${rayI18n.t('espacio')} ${spaceWord(parseFloat(simpleSpace.value)).toLowerCase()} · ${rayI18n.t('movimiento')} ${motionWord(parseFloat(simpleMotion.value)).toLowerCase()}.`;
+        syncMaterialChoices();
+    }
+    materialChoices.forEach((button) => button.addEventListener('click', () => {
+        materialSel.value = button.dataset.materialChoice;
+        materialSel.dispatchEvent(new Event('change'));
+    }));
+    simpleCharacter.addEventListener('input', () => {
+        charSlider.value = simpleCharacter.value;
+        charSlider.dispatchEvent(new Event('input'));
+        simpleCharacterV.textContent = charWord();
+        updateBasicSummary();
+    });
+    simpleMotion.addEventListener('input', () => {
+        const v = parseFloat(simpleMotion.value);
+        simpleMotionV.textContent = motionWord(v);
+        modMode.value = v < 2 ? '0' : '1';
+        modTarget.value = '0';
+        modRate.value = (0.10 + v * 0.006).toFixed(2);
+        modDepth.value = Math.round(v * 0.45);
+        chorus.value = Math.round(v * 0.22);
+        modModeV.textContent = modMode.options[modMode.selectedIndex].text;
+        modTargetV.textContent = modTarget.options[modTarget.selectedIndex].text;
+        modRateV.textContent = `${parseFloat(modRate.value).toFixed(2)} Hz`;
+        modDepthV.textContent = `${modDepth.value} %`;
+        chorusV.textContent = `${chorus.value} %`;
+        sendModulation();
+        sendEffects();
+        updateBasicSummary();
+    });
+    simpleSpace.addEventListener('input', () => {
+        const v = parseFloat(simpleSpace.value);
+        simpleSpaceV.textContent = spaceWord(v);
+        reverbSlider.value = Math.round(v * 0.72);
+        widthSlider.value = Math.round(v * 0.78);
+        reverbV.textContent = `${reverbSlider.value} %`;
+        widthV.textContent = `${widthSlider.value} %`;
+        sendReverb();
+        sendSpace();
+        updateBasicSummary();
+    });
+    simpleVolume.addEventListener('input', () => {
+        volSlider.value = simpleVolume.value;
+        volSlider.dispatchEvent(new Event('input'));
+        simpleVolumeV.textContent = `${simpleVolume.value} %`;
+    });
+
+    const compareCopy = {
+        delay: ['delay.normal', 'delay.ray', 'delay.note'],
+        reverb: ['reverb.normal', 'reverb.ray', 'reverb.note'],
+        chorus: ['chorus.normal', 'chorus.ray', 'chorus.note'],
+        flanger: ['flanger.normal', 'flanger.ray', 'flanger.note'],
+        resonator: ['resonator.normal', 'resonator.ray', 'resonator.note'],
+    };
+    function updateComparison() {
+        const c = compareCopy[compareFx.value];
+        compareNormal.textContent = rayI18n.copy(c[0]); compareRay.textContent = rayI18n.copy(c[1]); compareNote.textContent = rayI18n.copy(c[2]);
+        compareCpu.textContent = latestPerf ? (latestPerf.cpu < 0 ? 'n/d' : `${latestPerf.cpu.toFixed(1)} %`) : rayI18n.t('Esperando audio…');
+        compareVoices.textContent = latestPerf ? latestPerf.voices : '—';
+        compareGrains.textContent = latestPerf ? `${Math.round(latestPerf.spawnsPerSec)} / s` : '—';
+    }
+    compareFx.addEventListener('change', updateComparison);
+    $('compare-refresh').addEventListener('click', updateComparison);
+    updateComparison();
+
+    smoothChk.addEventListener('change', () => {
+        smoothV.innerText = smoothChk.checked ? 'ON' : 'OFF';
+        if (node) node.port.postMessage({ type: 'mode', value: smoothChk.checked ? 1 : 0 });
+    });
+
+    [aberSlider, tailSlider, evoSlider].forEach((sl) => {
+        sl.addEventListener('input', () => {
+            aberV.innerText = `${aberSlider.value} %`;
+            tailV.innerText = `${tailSlider.value} %`;
+            evoV.innerText = `${evoSlider.value} %`;
+            sendFx();
+        });
+    });
+
+    inertiaSlider.addEventListener('input', () => {
+        inertiaV.innerText = `${inertiaSlider.value} %`;
+        sendInertia();
+    });
+
+    [widthSlider, octSlider].forEach((sl) => {
+        sl.addEventListener('input', () => {
+            widthV.innerText = `${widthSlider.value} %`;
+            octV.innerText = `${octSlider.value} %`;
+            sendSpace();
+        });
+    });
+
+    pitchSlider.addEventListener('input', () => {
+        const s = parseInt(pitchSlider.value, 10);
+        pitchV.innerText = `${s > 0 ? '+' : ''}${s} st`;
+        sendPitch();
+    });
+
+    // Elegir una escala/acorde microtonal deja el voicing afinado en "Ninguno".
+    function leaveVoicing() {
+        voicingSel.value = '';
+        voicingV.innerText = 'Ninguno';
+        syncSegmentedSelect(voicingSel);
+    }
+    scaleSel.addEventListener('change', () => { leaveVoicing(); updateScaleLabels(); sendScale(); });
+    chordSel.addEventListener('change', () => { leaveVoicing(); updateScaleLabels(); sendScale(); });
+
+    voicingSel.addEventListener('change', () => {
+        const opt = voicingSel.options[voicingSel.selectedIndex];
+        voicingV.innerText = voicingSel.value ? opt.text.split('·')[0].trim() : 'Ninguno';
+        applyTonality();
+    });
+
+    reverbSlider.addEventListener('input', () => {
+        reverbV.innerText = `${reverbSlider.value} %`;
+        sendReverb();
+    });
+
+    materialSel.addEventListener('change', () => {
+        materialV.innerText = materialSel.options[materialSel.selectedIndex].text.split('·')[0].trim();
+        syncMaterialChoices();
+        updateBasicSummary();
+        sendMaterial();
+    });
+    materialAmount.addEventListener('input', () => { materialAmountV.innerText = `${materialAmount.value} %`; sendMaterial(); });
+    modMode.addEventListener('change', () => { modModeV.innerText = modMode.options[modMode.selectedIndex].text; sendModulation(); });
+    modTarget.addEventListener('change', () => { modTargetV.innerText = modTarget.options[modTarget.selectedIndex].text; sendModulation(); });
+    modRate.addEventListener('input', () => { modRateV.innerText = `${parseFloat(modRate.value).toFixed(2)} Hz`; sendModulation(); });
+    modDepth.addEventListener('input', () => { modDepthV.innerText = `${modDepth.value} %`; sendModulation(); });
+    modAttack.addEventListener('input', () => { modAttackV.innerText = `${modAttack.value} ms`; sendModulation(); });
+    modRelease.addEventListener('input', () => { modReleaseV.innerText = `${modRelease.value} ms`; sendModulation(); });
+    delay.addEventListener('input', () => { delayV.innerText = `${delay.value} %`; sendEffects(); });
+    delayFb.addEventListener('input', () => { delayFbV.innerText = `${delayFb.value} %`; sendEffects(); });
+    delayTime.addEventListener('input', () => { delayTimeV.innerText = `${delayTime.value} ms`; sendEffects(); });
+    chorus.addEventListener('input', () => { chorusV.innerText = `${chorus.value} %`; sendEffects(); });
+    chorusRate.addEventListener('input', () => { chorusRateV.innerText = `${parseFloat(chorusRate.value).toFixed(2)} Hz`; sendEffects(); });
+    chorusDepth.addEventListener('input', () => { chorusDepthV.innerText = `${chorusDepth.value} ms`; sendEffects(); });
+    flanger.addEventListener('input', () => { flangerV.innerText = `${flanger.value} %`; sendAdvancedEffects(); });
+    flangerRate.addEventListener('input', () => { flangerRateV.innerText = `${parseFloat(flangerRate.value).toFixed(2)} Hz`; sendAdvancedEffects(); });
+    flangerDepth.addEventListener('input', () => { flangerDepthV.innerText = `${flangerDepth.value} ms`; sendAdvancedEffects(); });
+    phaser.addEventListener('input', () => { phaserV.innerText = `${phaser.value} %`; sendAdvancedEffects(); });
+    phaserRate.addEventListener('input', () => { phaserRateV.innerText = `${parseFloat(phaserRate.value).toFixed(2)} Hz`; sendAdvancedEffects(); });
+    phaserDepth.addEventListener('input', () => { phaserDepthV.innerText = `${phaserDepth.value} %`; sendAdvancedEffects(); });
+    drive.addEventListener('input', () => { driveV.innerText = `${drive.value} %`; sendAdvancedEffects(); });
+    resonator.addEventListener('input', () => { resonatorV.innerText = `${resonator.value} %`; sendAdvancedEffects(); });
+    resonatorFreq.addEventListener('input', () => { resonatorFreqV.innerText = `${resonatorFreq.value} Hz`; sendAdvancedEffects(); });
+    resonatorDecay.addEventListener('input', () => { resonatorDecayV.innerText = `${resonatorDecay.value} %`; sendAdvancedEffects(); });
+
+    cutoffSlider.addEventListener('input', () => {
+        const v = parseFloat(cutoffSlider.value);
+        cutoffV.innerText = v >= 100 ? 'abierto' : `${Math.round(cutoffHz())} Hz`;
+        sendFilter();
+    });
+    resoSlider.addEventListener('input', () => {
+        resoV.innerText = `${resoSlider.value} %`;
+        sendFilter();
+    });
+    bpmSlider.addEventListener('input', () => {
+        bpmV.innerText = bpmSlider.value;
+        sendFilterLfo();
+    });
+    lfodivSel.addEventListener('change', () => {
+        lfodivV.innerText = lfodivSel.options[lfodivSel.selectedIndex].text;
+        sendFilterLfo();
+    });
+    lfodepthSlider.addEventListener('input', () => {
+        const oct = (parseFloat(lfodepthSlider.value) / 100 * 4).toFixed(1);
+        lfodepthV.innerText = `${oct} oct`;
+        sendFilterLfo();
+    });
+
+    smartChk.addEventListener('change', () => {
+        smartV.innerText = smartChk.checked ? 'ON' : 'OFF';
+        sendSmart();
+    });
+
+    ambientChk.addEventListener('change', () => {
+        ambientV.innerText = ambientChk.checked ? 'ON' : 'OFF';
+        if (!ambientChk.checked) latestFoci = null; // volver al foco único en el dibujo
+        sendAmbient();
+    });
+    aseedsS.addEventListener('input', () => { $('aseeds-v').innerText = aseedsS.value; sendAmbient(); });
+    adepthS.addEventListener('input', () => { $('adepth-v').innerText = adepthS.value; sendAmbient(); });
+    aspreadS.addEventListener('input', () => { $('aspread-v').innerText = `${aspreadS.value} %`; sendAmbient(); });
+    adriftS.addEventListener('input', () => { $('adrift-v').innerText = `${adriftS.value} %`; sendAmbient(); });
+    arateS.addEventListener('input', () => { $('arate-v').innerText = `${arateS.value} %`; sendAmbient(); });
+
+    let meterTarget = 0;
+    function setMeter(level) {
+        // level ~ envolvente media; mapear a % con un poco de ganancia visual
+        meterTarget = Math.min(100, level * 180);
+    }
+
+    // Diagnóstico: CPU del hilo de audio, rayos/bloque (voces activas), granos/s y latencia real.
+    function updatePerf(p) {
+        latestPerf = p;
+        updateComparison();
+        const cpu = p.cpu < 0 ? 'n/d' : `${p.cpu.toFixed(0)} %`;
+        const base = ctx ? `${((ctx.baseLatency || 0) * 1000).toFixed(1)} ms` : '—';
+        const outL = (ctx && ctx.outputLatency) ? `${(ctx.outputLatency * 1000).toFixed(0)} ms` : '—';
+        perfEl.innerHTML =
+            `CPU audio: <b>${cpu}</b> · ` +
+            `rayos: <b>${p.simulatedRays}</b> → voces: <b>${p.voices}</b> · ` +
+            `renovaciones/s: <b>${Math.round(p.spawnsPerSec)}</b><br>` +
+            `retención Top-36: <b>${(p.top36Retention * 100).toFixed(0)} %</b> · inertia: <b>${(p.top36Inertia * 100).toFixed(0)} %</b><br>` +
+            `latencia: base <b>${base}</b> · salida <b>${outL}</b>`;
+    }
+
+    // ── Grabación → WAV ──────────────────────────────────────────────────
+    // Graba la salida del motor (pre-Volumen). Original · Ray direct y Drone
+    // comparten el mismo motor, así que ambos se exportan con sus materiales y FX.
+    let isRecording = false;
+    let recPcmParts = [], recFrames = 0, recSr = 44100, recLimited = false;
+    recBtn.addEventListener('click', () => {
+        if (!node) return;
+        const next = !isRecording;
+        if (next) resetRecordingBuffer();
+        isRecording = next;
+        node.port.postMessage({ type: 'record', on: isRecording ? 1 : 0 });
+        recBtn.innerText = isRecording ? '■ Detener y descargar' : '● Grabar WAV';
+        recBtn.classList.toggle('recording', isRecording);
+        if (isRecording && !isPlaying) statusEl.innerText = rayI18n.t('Grabando… (dale a Play para que suene el motor)');
+    });
+
+    function resetRecordingBuffer() {
+        recPcmParts = [];
+        recFrames = 0;
+        recSr = 44100;
+        recLimited = false;
+    }
+
+    function handleRecordingChunk(d) {
+        if (d.sr) recSr = d.sr;
+        recLimited = recLimited || !!d.limited;
+        if (d.l && d.l.length) {
+            recPcmParts.push(encodePcm16(d.l, d.r));
+            recFrames += d.l.length;
+        }
+        if (d.done) finishRecording();
+    }
+
+    function finishRecording() {
+        isRecording = false;
+        recBtn.innerText = '● Grabar WAV';
+        recBtn.classList.remove('recording');
+        if (!recFrames) {
+            resetRecordingBuffer();
+            statusEl.innerText = rayI18n.t('Grabación vacía.');
+            return;
+        }
+        const seconds = recFrames / recSr;
+        const blob = new Blob([wavHeader(recFrames, recSr), ...recPcmParts], { type: 'audio/wav' });
+        downloadBlob(blob, `raydrone-${Date.now()}.wav`);
+        statusEl.innerText = `WAV exportado · ${seconds.toFixed(1)} s estéreo${recLimited ? ' (tope 5 min)' : ''}`;
+        resetRecordingBuffer();
+    }
+
+    // WAV PCM 16-bit estéreo, sin dependencias. El audio se empaqueta por
+    // chunks y al final solo se antepone la cabecera RIFF.
+    function wavHeader(frames, sr) {
+        const dataBytes = frames * 4;
+        const buf = new ArrayBuffer(44);
+        const dv = new DataView(buf);
+        const wstr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+        wstr(0, 'RIFF'); dv.setUint32(4, 36 + dataBytes, true); wstr(8, 'WAVE');
+        wstr(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+        dv.setUint32(24, sr, true); dv.setUint32(28, sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true);
+        wstr(36, 'data'); dv.setUint32(40, dataBytes, true);
+        return buf;
+    }
+
+    function encodePcm16(l, r) {
+        const n = l.length;
+        const buf = new ArrayBuffer(n * 4);
+        const dv = new DataView(buf);
+        let o = 0;
+        for (let i = 0; i < n; i++) {
+            const lv = Math.max(-1, Math.min(1, l[i]));
+            const rv = Math.max(-1, Math.min(1, r ? r[i] : l[i]));
+            dv.setInt16(o, lv < 0 ? lv * 32768 : lv * 32767, true); o += 2;
+            dv.setInt16(o, rv < 0 ? rv * 32768 : rv * 32767, true); o += 2;
+        }
+        return buf;
+    }
+
+    function downloadBlob(blob, name) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+
+    // ── Visualización: onda + rayos (granos reales) + foco ──────────────────
+    function computePeaks() {
+        const W = waveCanvas.width;
+        wavePeaks = new Float32Array(W);
+        waveEnergy = new Float32Array(W);
+        if (!sampleData) return;
+        for (let x = 0; x < W; x++) {
+            const start = Math.floor(x / W * sampleData.length);
+            const end = Math.floor((x + 1) / W * sampleData.length);
+            let peak = 0, sumSq = 0;
+            for (let i = start; i < end; i++) {
+                const v = sampleData[i], a = Math.abs(v);
+                if (a > peak) peak = a;
+                sumSq += v * v;
+            }
+            wavePeaks[x] = peak;
+            waveEnergy[x] = Math.sqrt(sumSq / Math.max(1, end - start));
+        }
+    }
+
+    function pushRays(offsets, bands, ratios) {
+        const inv = 1 / Math.max(duration, 0.001);
+        for (let k = 0; k < offsets.length; k++) {
+            // seed estable por rayo: define su altura de salida y la curva del arco
+            visRays.push({
+                x: offsets[k] * inv,
+                band: bands ? (bands[k] | 0) : 1,
+                ratio: ratios ? ratios[k] : 1,
+                life: 1.0,
+                seed: Math.random(),
+            });
+        }
+        if (visRays.length > 260) visRays.splice(0, visRays.length - 260);
+    }
+
+    // Color por banda: grave=naranja, medio=rojo, agudo=rosa claro (se ve la aberración)
+    const BAND_RGB = [[255, 138, 61], [255, 53, 94], [255, 190, 215]];
+
+    // ── Pantalla completa de la onda + rayos ─────────────────────────────────
+    // frame() lee waveCanvas.width/height en cada cuadro, así que basta con subir
+    // el buffer a la resolución de pantalla (no se estira; se redibuja nítido).
+    const vizWrap = $('viz-wrap'), fsBtn = $('fs-btn');
+    function resizeViz() {
+        const fs = (document.fullscreenElement || document.webkitFullscreenElement) === vizWrap;
+        let w = 700, h = 150;
+        if (fs) {
+            // Tope de resolución: ~2200px en el lado largo (misma proporción que la
+            // pantalla → sin estirar). A 4K serían 8M píxeles/cuadro = lento; esto
+            // baja a ~3M manteniéndolo nítido.
+            // El 2D con glow/gradientes cuesta por píxel; renderizamos a una
+            // resolución moderada y dejamos que el CSS la escale. En fullscreen
+            // prima la fluidez: el glow y las curvas toleran bien 720 px internos.
+            const cw = vizWrap.clientWidth, ch = vizWrap.clientHeight;
+            const s = Math.min(1, 720 / Math.max(1, cw));
+            w = Math.max(700, Math.round(cw * s));
+            h = Math.max(150, Math.round(ch * s));
+        }
+        if (waveCanvas.width !== w || waveCanvas.height !== h) {
+            waveCanvas.width = w; waveCanvas.height = h;
+            zoomKey = ''; // fuerza recálculo de los picos a la nueva anchura
+        }
+    }
+    fsBtn.addEventListener('click', () => {
+        const cur = document.fullscreenElement || document.webkitFullscreenElement;
+        if (cur === vizWrap) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); }
+        else { (vizWrap.requestFullscreen || vizWrap.webkitRequestFullscreen).call(vizWrap); }
+    });
+    document.addEventListener('fullscreenchange', resizeViz);
+    document.addEventListener('webkitfullscreenchange', resizeViz);
+
+    // ── Señal de salida: osciloscopio + espectro de lo que REALMENTE suena ──
+    // Tap pasivo sobre `jsGain` (la mezcla final, después de los rayos + reverb,
+    // antes del destino), independiente del overlay "live" (tecla S) que se
+    // dibuja sobre la onda de origen. No interactúa con zoom/fullscreen: este
+    // panel siempre muestra la salida actual a tamaño fijo.
+    function drawOutput() {
+        const W = outCanvas.width, H = outCanvas.height;
+        octx.clearRect(0, 0, W, H);
+        octx.fillStyle = canvasTheme.bg; octx.fillRect(0, 0, W, H);
+        if (!analyser) return;
+
+        // Espectro (mitad inferior): barras log-espaciadas, mismo lenguaje visual
+        // que el resto del panel (gradiente rosa→naranja, mezcla aditiva).
+        analyser.getByteFrequencyData(freqData);
+        const specTop = H * 0.42, specH = H - specTop;
+        const bars = 96, bw = W / bars;
+        octx.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < bars; i++) {
+            const bin = Math.min(freqData.length - 1, Math.floor(Math.pow(i / bars, 2) * freqData.length));
+            const v = freqData[bin] / 255;
+            const bh = v * v * specH;
+            octx.fillStyle = canvasColor('accent', 0.3 + v * 0.5);
+            octx.fillRect(i * bw, H - bh, bw * 0.82, bh);
+        }
+        octx.globalCompositeOperation = 'source-over';
+
+        // Osciloscopio (mitad superior): la forma de onda real, muestra a muestra.
+        analyser.getFloatTimeDomainData(timeData);
+        const oscMid = specTop / 2, oscAmp = specTop * 0.46, n = timeData.length;
+        octx.strokeStyle = canvasColor('accent-2', 0.85);
+        octx.lineWidth = 1.3;
+        octx.beginPath();
+        for (let x = 0; x < W; x++) {
+            const y = oscMid - timeData[Math.floor(x / W * n)] * oscAmp;
+            x ? octx.lineTo(x, y) : octx.moveTo(x, y);
+        }
+        octx.stroke();
+        octx.strokeStyle = canvasColor('accent-2', 0.18);
+        octx.beginPath(); octx.moveTo(0, specTop); octx.lineTo(W, specTop); octx.stroke();
+    }
+
+    let meterShown = 0;
+    let zoomPeaks = null, zoomEnergy = null, zoomLow = null, zoomHigh = null;
+    let flowPeak = null, flowEnergy = null, flowBias = null, zoomKey = '';
+    let lastVizFrame = 0;
+    let lastHeavyViz = 0;
+    const MM_H = 18; // alto de la tira-minimapa (solo visible con zoom)
+    // Estado del "modo live": espectro FFT, modo radial, HUD (oculto por defecto).
+    let liveSpectrum = false, liveRadial = false, hudShown = false;
+
+    function frame(now = performance.now()) {
+        const W = waveCanvas.width, H = waveCanvas.height;
+        const frameSeconds = lastVizFrame ? Math.min(0.08, Math.max(0.008, (now - lastVizFrame) * 0.001)) : 1 / 60;
+        lastVizFrame = now;
+        wctx.clearRect(0, 0, W, H);
+        wctx.fillStyle = canvasTheme.bg; wctx.fillRect(0, 0, W, H);
+
+        // Retícula de instrumento y señal latente: el deck se siente activo
+        // incluso antes de cargar una fuente, sin simular audio inexistente.
+        wctx.lineWidth = 1;
+        for (let x = 0; x <= W; x += Math.max(32, W / 16)) {
+            wctx.strokeStyle = x % Math.max(64, W / 8) < 1 ? canvasColor('accent-2', .07) : canvasColor('line', .025);
+            wctx.beginPath(); wctx.moveTo(x, 0); wctx.lineTo(x, H); wctx.stroke();
+        }
+        for (let y = 0; y <= H; y += Math.max(24, H / 8)) {
+            wctx.strokeStyle = canvasColor('line', .028);
+            wctx.beginPath(); wctx.moveTo(0, y); wctx.lineTo(W, y); wctx.stroke();
+        }
+        if (!sampleData) {
+            const now = performance.now() * .001;
+            const mid0 = H * .5;
+            const pulse = wctx.createRadialGradient(W * .5, mid0, 0, W * .5, mid0, Math.min(W, H) * .62);
+            pulse.addColorStop(0, canvasColor('accent-2', .065));
+            pulse.addColorStop(.55, canvasColor('accent', .018));
+            pulse.addColorStop(1, 'rgba(0,0,0,0)');
+            wctx.fillStyle = pulse; wctx.fillRect(0, 0, W, H);
+            wctx.globalCompositeOperation = 'lighter';
+            for (let band = 0; band < 3; band++) {
+                wctx.strokeStyle = band === 0 ? canvasColor('accent-2', .28) : band === 1 ? canvasColor('accent', .14) : canvasColor('focus', .09);
+                wctx.lineWidth = 1.1 + band * .35;
+                wctx.beginPath();
+                for (let x = 0; x <= W; x += 3) {
+                    const env = Math.sin(Math.PI * x / W);
+                    const wave = Math.sin(x * (.018 + band * .009) + now * (.55 + band * .23)) *
+                                 Math.sin(x * .0041 - now * .16) * H * (.055 + band * .022) * env;
+                    const y = mid0 + wave + (band - 1) * H * .065;
+                    x ? wctx.lineTo(x, y) : wctx.moveTo(x, y);
+                }
+                wctx.stroke();
+            }
+            for (let i = 0; i < 22; i++) {
+                const x = ((i * 89.13 + now * (7 + i % 4)) % (W + 20)) - 10;
+                const y = mid0 + Math.sin(i * 2.1 + now * .4) * H * .31;
+                wctx.fillStyle = i % 3 ? canvasColor('accent-2', .22) : canvasColor('accent', .24);
+                wctx.beginPath(); wctx.arc(x, y, .8 + (i % 4) * .38, 0, 7); wctx.fill();
+            }
+            wctx.globalCompositeOperation = 'source-over';
+        }
+
+        const dur = Math.max(duration, 0.001);
+        const { t0, winDur, z } = zoomWindow();
+        const zoomed = z > 1.001 && !!sampleData;
+        const top = zoomed ? MM_H : 0;       // con zoom, la onda vive bajo el minimapa
+        const mid = top + (H - top) / 2;
+        const t1 = t0 + winDur;
+        const focusX = (focusSec - t0) / winDur * W;
+        const glow = 0.4 + Math.min(1, meterShown / 70) * 0.6; // los visuales pulsan con el nivel
+
+        // Picos de la ventana visible (cache: solo recalcula al mover foco/zoom/sample).
+        // A ×1 la ventana es el archivo entero → la vista global de siempre.
+        if (sampleData) {
+            const key = `${t0.toFixed(5)}|${z.toFixed(2)}|${sampleData.length}`;
+            if (key !== zoomKey) {
+                zoomKey = key;
+                zoomPeaks = new Float32Array(W);
+                zoomEnergy = new Float32Array(W);
+                zoomLow = new Float32Array(W);
+                zoomHigh = new Float32Array(W);
+                const i0 = Math.floor(t0 / dur * sampleData.length);
+                const span = Math.max(1, Math.floor(winDur / dur * sampleData.length));
+                for (let x = 0; x < W; x++) {
+                    const a = i0 + Math.floor(x / W * span);
+                    const b = Math.min(i0 + Math.floor((x + 1) / W * span), sampleData.length);
+                    let pk = 0, lo = 0, hi = 0, sumSq = 0;
+                    for (let i = a; i < b; i++) {
+                        const v = sampleData[i], av = Math.abs(v);
+                        if (av > pk) pk = av;
+                        if (v < lo) lo = v;
+                        if (v > hi) hi = v;
+                        sumSq += v * v;
+                    }
+                    zoomPeaks[x] = pk;
+                    zoomEnergy[x] = Math.sqrt(sumSq / Math.max(1, b - a));
+                    zoomLow[x] = lo;
+                    zoomHigh[x] = hi;
+                }
+
+                // Envolvente visual suavizada. Se calcula solo al cambiar la
+                // ventana, nunca por frame: conserva fraseo y dinámica del WAV
+                // eliminando los dientes de muestra propios de un editor técnico.
+                flowPeak = new Float32Array(W);
+                flowEnergy = new Float32Array(W);
+                flowBias = new Float32Array(W);
+                const radius = Math.max(5, Math.round(W / 70));
+                const peakSum = new Float32Array(W + 1);
+                const energySum = new Float32Array(W + 1);
+                const biasSum = new Float32Array(W + 1);
+                for (let x = 0; x < W; x++) {
+                    peakSum[x + 1] = peakSum[x] + zoomPeaks[x];
+                    energySum[x + 1] = energySum[x] + zoomEnergy[x];
+                    biasSum[x + 1] = biasSum[x] + (zoomHigh[x] + zoomLow[x]) * 0.5;
+                }
+                for (let x = 0; x < W; x++) {
+                    const a = Math.max(0, x - radius), b = Math.min(W, x + radius + 1);
+                    const invCount = 1 / (b - a);
+                    flowPeak[x] = (peakSum[b] - peakSum[a]) * invCount;
+                    flowEnergy[x] = (energySum[b] - energySum[a]) * invCount;
+                    flowBias[x] = (biasSum[b] - biasSum[a]) * invCount;
+                }
+                zoomV.innerText = zoomed ? `×${z.toFixed(z < 10 ? 1 : 0)} · ${(winDur * 1000).toFixed(0)} ms` : '×1';
+            }
+        }
+
+        // Cono de dispersión (apertura) en la escala de la ventana
+        if (sampleData) {
+            const t = clamp(parseFloat(charSlider.value) / 100, 0, 1);
+            const apSec = 0.02 + t * t * 0.6;
+            const apX = (apSec / winDur) * W;
+            const grad = wctx.createLinearGradient(focusX - apX, 0, focusX + apX, 0);
+            grad.addColorStop(0, canvasColor('accent', 0));
+            grad.addColorStop(0.5, canvasColor('accent', 0.10));
+            grad.addColorStop(1, canvasColor('accent', 0));
+            wctx.fillStyle = grad;
+            wctx.fillRect(focusX - apX, top, apX * 2, H - top);
+        }
+
+        // El WAV se visualiza como tres corrientes vivas. Su amplitud, apertura y
+        // deriva proceden de la envolvente real; la fase solo aporta movimiento.
+        if (flowPeak && !liveRadial) {
+            const amp = (H - top) * 0.46;
+            const phase = now * 0.00034;
+
+            // Perfil real del WAV al fondo: silueta suavizada, casi fantasma.
+            // Mantiene la lectura temporal del archivo sin competir con el flow.
+            const profileScale = 0.72;
+            const profileFill = wctx.createLinearGradient(0, mid - amp, 0, mid + amp);
+            profileFill.addColorStop(0, canvasColor('accent', 0.018));
+            profileFill.addColorStop(0.48, canvasColor('accent-2', 0.045));
+            profileFill.addColorStop(0.52, canvasColor('accent-2', 0.045));
+            profileFill.addColorStop(1, canvasColor('accent', 0.018));
+            wctx.fillStyle = profileFill;
+            wctx.beginPath();
+            wctx.moveTo(0, mid - flowPeak[0] * amp * profileScale);
+            for (let x = 3; x <= W; x += 3) {
+                const xi = Math.min(W - 1, x);
+                wctx.lineTo(x, mid - flowPeak[xi] * amp * profileScale);
+            }
+            for (let x = W; x >= 0; x -= 3) {
+                const xi = Math.min(W - 1, x);
+                wctx.lineTo(x, mid + flowPeak[xi] * amp * profileScale);
+            }
+            wctx.closePath();
+            wctx.fill();
+
+            wctx.strokeStyle = canvasColor('accent', 0.07 + glow * 0.035);
+            wctx.lineWidth = 0.75;
+            for (const sign of [-1, 1]) {
+                wctx.beginPath();
+                for (let x = 0; x <= W; x += 3) {
+                    const xi = Math.min(W - 1, x);
+                    const y = mid + sign * flowPeak[xi] * amp * profileScale;
+                    x ? wctx.lineTo(x, y) : wctx.moveTo(x, y);
+                }
+                wctx.stroke();
+            }
+
+            const streams = [
+                { color: canvasTheme.accent2Rgb, offset: -0.11, speed: 0.78, freq: 0.010, sign: -1 },
+                { color: canvasTheme.accentRgb, offset: 0.02, speed: -0.55, freq: 0.014, sign: 1 },
+                { color: canvasTheme.focusRgb, offset: 0.14, speed: 0.38, freq: 0.018, sign: 0.55 },
+            ];
+            wctx.globalCompositeOperation = 'lighter';
+            for (const stream of streams) {
+                const [r, g, b] = stream.color;
+                for (let layer = 0; layer < 2; layer++) {
+                    wctx.strokeStyle = `rgba(${r},${g},${b},${layer ? 0.28 + glow * 0.23 : 0.055 + glow * 0.035})`;
+                    wctx.lineWidth = layer ? 1.05 + glow * 0.35 : 5.2;
+                    wctx.beginPath();
+                    for (let x = 0; x <= W; x += 3) {
+                        const xi = Math.min(W - 1, x);
+                        const energy = flowEnergy[xi];
+                        const envelope = flowPeak[xi];
+                        const flow = Math.sin(x * stream.freq + phase * stream.speed * 6.283) *
+                                     (2.2 + energy * amp * 0.3);
+                        const breath = Math.sin(x * 0.0037 - phase * stream.speed * 2.4) * envelope * amp * 0.2;
+                        const dataDrift = flowBias[xi] * amp * 0.75 +
+                                          stream.sign * envelope * amp * 0.18;
+                        const y = mid + stream.offset * (H - top) + dataDrift + flow + breath;
+                        x ? wctx.lineTo(x, y) : wctx.moveTo(x, y);
+                    }
+                    wctx.stroke();
+                }
+            }
+            wctx.globalCompositeOperation = 'source-over';
+        }
+
+        // Rayos: cada grano sale de su offset (spread vertical) y converge al foco
+        // por un arco mientras se desvanece. Mezcla aditiva → glow real al solaparse.
+        // La vida decae siempre; solo se dibujan los que caen dentro de la ventana.
+        wctx.globalCompositeOperation = 'lighter';
+        const spread = (H - top) * 0.42;
+        const fullScreenViz = (document.fullscreenElement || document.webkitFullscreenElement) === vizWrap;
+        const rayBudget = fullScreenViz ? 90 : 220;
+        const rayStride = Math.max(1, Math.ceil(visRays.length / rayBudget));
+        for (let i = visRays.length - 1; i >= 0; i--) {
+            const r = visRays[i];
+            r.life -= frameSeconds / 1.05;
+            if (r.life <= 0) { visRays.splice(i, 1); continue; }
+            if (i % rayStride) continue;
+            const tsec = r.x * dur;
+            if (tsec < t0 || tsec > t1) continue;
+            const p = 1 - r.life;                       // 0 al nacer → 1 al morir
+            const ease = p * p * (3 - 2 * p);           // smoothstep: acelera hacia el foco
+            const bx = (tsec - t0) / winDur * W;
+            const arc = (r.seed * 2 - 1) * spread;      // altura de salida (determinista)
+            const pe = p > 0.1 ? p - 0.1 : 0;
+            const easeT = pe * pe * (3 - 2 * pe);
+            let hx, hy, tx, ty;
+            if (liveRadial) {
+                // Modo radial: cada rayo entra por un ángulo fijo y converge al
+                // centro mientras se desvanece (lo mismo, en polar).
+                const cx = W / 2, cy = top + (H - top) / 2;
+                const ang = r.seed * 6.2831853;
+                const R0 = Math.min(W, H - top) * 0.47;
+                hx = cx + Math.cos(ang) * R0 * (1 - ease);
+                hy = cy + Math.sin(ang) * R0 * (1 - ease);
+                tx = cx + Math.cos(ang) * R0 * (1 - easeT);
+                ty = cy + Math.sin(ang) * R0 * (1 - easeT);
+            } else {
+                hx = bx + (focusX - bx) * ease;
+                hy = mid + arc * (1 - ease);
+                tx = bx + (focusX - bx) * easeT;
+                ty = mid + arc * (1 - easeT);
+            }
+            const base = canvasTheme.bands[r.band] || canvasTheme.bands[1];
+            const pitchTint = clamp(Math.log2(Math.max(0.25, r.ratio || 1)) * 0.28 + 0.5, 0, 1);
+            const c = [
+                Math.round(base[0] + (canvasTheme.textRgb[0] - base[0]) * pitchTint * 0.32),
+                Math.round(base[1] + (canvasTheme.textRgb[1] - base[1]) * pitchTint * 0.42),
+                Math.round(base[2] + (canvasTheme.textRgb[2] - base[2]) * pitchTint * 0.36),
+            ];
+            const a = r.life * glow;
+            // Cola curva: reconstruye el tramo reciente de la trayectoria, con
+            // un control perpendicular para que cada rayo tenga firma propia.
+            const startP = Math.max(0, p - 0.24);
+            const bend = (r.seed * 2 - 1) * spread * 0.42;
+            const midP = (startP + p) * 0.5;
+            const startEase = startP * startP * (3 - 2 * startP);
+            const midEase = midP * midP * (3 - 2 * midP);
+            let sx, sy, mx, my;
+            if (liveRadial) {
+                const cx = W / 2, cy = top + (H - top) / 2, ang = r.seed * 6.2831853;
+                const radialBend = bend / Math.max(1, spread);
+                const radius = Math.min(W, H - top) * 0.47;
+                const startAngle = ang + radialBend * (1 - startP);
+                const midAngle = ang + radialBend * (1 - midP);
+                sx = cx + Math.cos(startAngle) * radius * (1 - startEase);
+                sy = cy + Math.sin(startAngle) * radius * (1 - startEase);
+                mx = cx + Math.cos(midAngle) * radius * (1 - midEase);
+                my = cy + Math.sin(midAngle) * radius * (1 - midEase);
+            } else {
+                sx = bx + (focusX - bx) * startEase;
+                sy = mid + arc * (1 - startEase) + Math.sin(Math.PI * startP) * bend;
+                mx = bx + (focusX - bx) * midEase;
+                my = mid + arc * (1 - midEase) + Math.sin(Math.PI * midP) * bend;
+            }
+            // Una cuadrática que atraviesa el punto medio aproxima la antigua
+            // polilínea de nueve muestras con una sola operación de trazado.
+            const controlX = 2 * mx - (sx + hx) * 0.5;
+            const controlY = 2 * my - (sy + hy) * 0.5;
+            wctx.lineCap = 'round';
+            const firstTrailLayer = fullScreenViz ? 1 : 0;
+            for (let layer = firstTrailLayer; layer < 2; layer++) {
+                wctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${a * (layer ? 0.46 : 0.10)})`;
+                wctx.lineWidth = layer ? 1.15 : 4.8;
+                wctx.beginPath();
+                wctx.moveTo(sx, sy);
+                wctx.quadraticCurveTo(controlX, controlY, hx, hy);
+                wctx.stroke();
+            }
+            // Cabeza: halo por banda y núcleo blanco; tamaño ligado al pitch.
+            const headR = 2.4 + pitchTint * 1.7;
+            if (!fullScreenViz) {
+                wctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${a * 0.15})`;
+                wctx.beginPath(); wctx.arc(hx, hy, headR * 2.5, 0, 6.283); wctx.fill();
+            }
+            wctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${a * 0.72})`;
+            wctx.beginPath(); wctx.arc(hx, hy, headR, 0, 6.283); wctx.fill();
+            wctx.fillStyle = canvasColor('text', a * 0.88);
+            wctx.beginPath(); wctx.arc(hx, hy, 0.75, 0, 6.283); wctx.fill();
+
+            // Al alcanzar el foco, una onda expansiva hace visible la convergencia.
+            if (p > 0.78) {
+                const impact = (p - 0.78) / 0.22;
+                const radius = 3 + impact * 18;
+                wctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},${(1 - impact) * a * 0.48})`;
+                wctx.lineWidth = 1.2;
+                wctx.beginPath(); wctx.arc(hx, hy, radius, 0, 6.283); wctx.stroke();
+            }
+        }
+        wctx.lineCap = 'butt';
+
+        // Espectro FFT (modo live): barras log-espaciadas reactivas en la base.
+        if (liveSpectrum && analyser) {
+            analyser.getByteFrequencyData(freqData);
+            const bars = 72, bw = W / bars, base = H - 2;
+            wctx.globalCompositeOperation = 'lighter';
+            for (let i = 0; i < bars; i++) {
+                const bin = Math.min(freqData.length - 1, Math.floor(Math.pow(i / bars, 2) * freqData.length));
+                const v = freqData[bin] / 255;
+                const bh = v * v * (H - top) * 0.55;
+                const hue = 340 - (i / bars) * 70; // rosa → naranja
+                wctx.fillStyle = `hsla(${hue}, 90%, ${42 + v * 28}%, ${0.22 + v * 0.5})`;
+                wctx.fillRect(i * bw, base - bh, bw * 0.78, bh);
+            }
+            wctx.globalCompositeOperation = 'source-over';
+        }
+
+        // Focos: en ambient, la constelación entera (cada foco con su peso);
+        // si no, el foco único de siempre. Bloom radial aditivo + eje.
+        const ambFoci = (ambientChk.checked && latestFoci && latestFoci.length) ? latestFoci : null;
+        wctx.globalCompositeOperation = 'lighter';
+        function drawFocus(fx, w) {
+            if (fx < -60 || fx > W + 60) return;
+            const g = glow * (0.35 + 0.65 * w);
+            const bloomR = (8 + g * 42) * (0.5 + 0.5 * w);
+            const bg = wctx.createRadialGradient(fx, mid, 0, fx, mid, bloomR);
+            bg.addColorStop(0, canvasColor('accent-2', 0.5 * g));
+            bg.addColorStop(0.4, canvasColor('accent', 0.22 * g));
+            bg.addColorStop(1, canvasColor('accent', 0));
+            wctx.fillStyle = bg;
+            wctx.beginPath(); wctx.arc(fx, mid, bloomR, 0, 6.283); wctx.fill();
+        }
+        if (ambFoci) {
+            for (let i = 0; i < ambFoci.length; i += 2) {
+                drawFocus((ambFoci[i] - t0) / winDur * W, clamp(ambFoci[i + 1], 0, 1));
+            }
+        } else {
+            drawFocus(focusX, 1);
+        }
+        wctx.globalCompositeOperation = 'source-over';
+
+        // Ejes de foco (líneas finas; en ambient una por foco, opacidad ∝ peso).
+        // Sin shadowBlur: a alta resolución (fullscreen) el desenfoque por sombra
+        // es carísimo; el bloom radial del foco ya aporta el glow.
+        wctx.save();
+        if (ambFoci) {
+            for (let i = 0; i < ambFoci.length; i += 2) {
+                const fx = (ambFoci[i] - t0) / winDur * W;
+                if (fx < 0 || fx > W) continue;
+                const w = clamp(ambFoci[i + 1], 0, 1);
+                wctx.strokeStyle = canvasColor('accent', (0.25 + 0.55 * w) * (0.6 + 0.4 * glow));
+                wctx.lineWidth = 0.8 + 1.2 * w;
+                wctx.beginPath(); wctx.moveTo(fx, top); wctx.lineTo(fx, H); wctx.stroke();
+            }
+        } else {
+            wctx.strokeStyle = canvasColor('accent', 0.55 + glow * 0.4); wctx.lineWidth = 1.5;
+            wctx.beginPath(); wctx.moveTo(focusX, top); wctx.lineTo(focusX, H); wctx.stroke();
+        }
+        wctx.restore();
+        wctx.lineWidth = 1;
+
+        // Minimapa (solo con zoom): archivo entero + ventana visible marcada
+        if (zoomed && wavePeaks) {
+            wctx.fillStyle = canvasColor('surface', 0.92); wctx.fillRect(0, 0, W, MM_H);
+            const mmid = MM_H / 2;
+            wctx.strokeStyle = canvasColor('accent', 0.30); wctx.beginPath();
+            for (let x = 0; x < W; x += 2) {
+                const a = wavePeaks[x] * (MM_H * 0.42);
+                wctx.moveTo(x, mmid - a); wctx.lineTo(x, mmid + a);
+            }
+            wctx.stroke();
+            if (waveEnergy) {
+                wctx.strokeStyle = canvasColor('accent-2', 0.42);
+                wctx.beginPath();
+                for (let x = 0; x < W; x += 2) {
+                    const a = waveEnergy[x] * (MM_H * 0.34);
+                    wctx.moveTo(x, mmid - a); wctx.lineTo(x, mmid + a);
+                }
+                wctx.stroke();
+            }
+            // focos sobre el minimapa (posición global)
+            if (ambFoci) {
+                for (let i = 0; i < ambFoci.length; i += 2) {
+                    const w = clamp(ambFoci[i + 1], 0, 1);
+                    const fx = ambFoci[i] / dur * W;
+                    wctx.fillStyle = canvasColor('accent-2', 0.3 + 0.6 * w);
+                    wctx.fillRect(fx - 0.5, 0, 1 + w, MM_H);
+                }
+            }
+            const wx0 = t0 / dur * W, wx1 = t1 / dur * W;
+            wctx.fillStyle = canvasColor('accent', 0.18);
+            wctx.fillRect(wx0, 0, Math.max(2, wx1 - wx0), MM_H);
+            wctx.strokeStyle = canvasColor('accent-2', 0.8);
+            wctx.strokeRect(wx0 + 0.5, 0.5, Math.max(2, wx1 - wx0) - 1, MM_H - 1);
+            wctx.strokeStyle = canvasColor('accent', 0.25);
+            wctx.beginPath(); wctx.moveTo(0, MM_H + 0.5); wctx.lineTo(W, MM_H + 0.5); wctx.stroke();
+        }
+
+        // Medidor de salida (suavizado)
+        meterShown += (meterTarget - meterShown) * 0.25;
+        meterFill.style.width = `${meterShown}%`;
+
+        // En fullscreen ambos canvas quedan fuera del árbol visible. Evitar su
+        // FFT, limpieza y cientos de partículas ahorra trabajo sin cambiar audio.
+        if (!fullScreenViz && (now - lastHeavyViz) >= 33) {
+            lastHeavyViz = now;
+            drawLattice(glow);
+            drawOutput();
+        }
+        requestAnimationFrame(frame);
+    }
+
+    // ── Zoom: ventana ampliada alrededor del foco, con sus rayos ────────────
+    function zoomWindow() {
+        const z = clamp(parseFloat(zoomSlider.value), 1, 64);
+        const winDur = Math.max(duration, 0.001) / z;
+        const t0 = clamp(focusSec - winDur / 2, 0, Math.max(0, duration - winDur));
+        return { t0, winDur, z };
+    }
+
+    // ── División tonal: retícula de grados (cents) + cada rayo sobre su línea ──
+    function drawLattice(glow) {
+        const W = latCanvas.width, H = latCanvas.height;
+        lctx.clearRect(0, 0, W, H);
+        lctx.fillStyle = canvasTheme.bg; lctx.fillRect(0, 0, W, H);
+        const all = scaleRatios(scaleSel.value);
+        if (!all.length) {
+            lctx.fillStyle = canvasColor('muted', 0.6);
+            lctx.font = '11px monospace';
+            lctx.fillText('Libre: pitch continuo (sin retícula)', 12, H / 2 + 4);
+            return;
+        }
+        const period = scaleSel.value === 'bp' ? 3 : 2;
+        const act = activeRatios();
+        const yOf = (r) => H - 10 - (Math.log(r) / Math.log(period)) * (H - 20);
+        const centsOf = (r) => 1200 * Math.log2(r);
+
+        // Todas las divisiones de la escala (tenues) + grados activos (claros, con cents)
+        lctx.font = '9px monospace';
+        for (const r of all) {
+            const y = yOf(r);
+            const active = act.includes(r);
+            lctx.strokeStyle = active ? canvasColor('accent', 0.55) : canvasColor('lineStrong', 0.10);
+            lctx.beginPath(); lctx.moveTo(34, y); lctx.lineTo(W, y); lctx.stroke();
+            if (active) {
+                lctx.fillStyle = canvasColor('accent-2', 0.9);
+                lctx.fillText(`${Math.round(centsOf(r))}¢`, 2, y + 3);
+            }
+        }
+
+        // Rayos: cada uno viaja por la línea de su grado mientras se apaga
+        lctx.globalCompositeOperation = 'lighter';
+        for (const r of visRays) {
+            if (!r.ratio || r.ratio <= 0) continue;
+            const y = yOf(clamp(r.ratio, 1, period * 0.999));
+            const x = 34 + (1 - r.life) * (W - 34);
+            const c = canvasTheme.bands[r.band] || canvasTheme.bands[1];
+            const a = r.life * glow;
+            lctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${a * 0.25})`;
+            lctx.beginPath(); lctx.arc(x, y, 3.0, 0, 6.283); lctx.fill();
+            lctx.fillStyle = canvasColor('text', a * 0.6);
+            lctx.beginPath(); lctx.arc(x, y, 1.1, 0, 6.283); lctx.fill();
+        }
+        lctx.globalCompositeOperation = 'source-over';
+    }
+
+    // Click en la onda: con zoom, la tira-minimapa salta global y el resto fija
+    // el foco fino dentro de la ventana; a ×1 es el click global de siempre.
+    waveCanvas.addEventListener('click', (e) => {
+        if (!sampleData) return;
+        const rect = waveCanvas.getBoundingClientRect();
+        const fx = (e.clientX - rect.left) / rect.width;
+        const cy = (e.clientY - rect.top) / rect.height * waveCanvas.height;
+        const { t0, winDur, z } = zoomWindow();
+        if (z > 1.001 && cy <= MM_H) focusSec = clamp(fx * duration, 0, duration);
+        else focusSec = clamp(t0 + fx * winDur, 0, duration);
+        if (isPlaying) { if (mode === 'dry') startDry(); else sendParams(true); }
+    });
+
+    // ── Controles del zoom ──────────────────────────────────────────────────
+    function setZoom(z) {
+        zoomSlider.value = clamp(z, 1, 64);
+        zoomKey = ''; // fuerza recálculo de picos y de la etiqueta en el próximo frame
+    }
+    zoomSlider.addEventListener('input', () => setZoom(parseFloat(zoomSlider.value)));
+
+    waveCanvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        setZoom(parseFloat(zoomSlider.value) * Math.pow(1.25, -e.deltaY / 100));
+    }, { passive: false });
+
+    // Pellizco (móvil): dos dedos sobre la onda
+    let pinchD = 0, pinchZ = 1;
+    waveCanvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            pinchD = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                                e.touches[0].clientY - e.touches[1].clientY);
+            pinchZ = parseFloat(zoomSlider.value);
+        }
+    }, { passive: true });
+    waveCanvas.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && pinchD > 0) {
+            e.preventDefault();
+            const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                                 e.touches[0].clientY - e.touches[1].clientY);
+            setZoom(pinchZ * d / pinchD);
+        }
+    }, { passive: false });
+
+    // ════════════════════════════════════════════════════════════════════
+    //  CONVERGENCE LAB — las curvas las calcula el MISMO motor Rust (raydrone.wasm)
+    //  en un Web Worker, con semilla fija → reproducible y sin congelar la UI.
+    //  (El estimador JS de abajo se conserva solo para el A/B audible.)
+    // ════════════════════════════════════════════════════════════════════
+    const LAB_GRAIN = 4096;
+    const LAB_MAX_A = 6600;                 // apertura máx. para el target exacto (rápido)
+    const LAB_NS = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192];
+    const LAB_TRIALS = 12;
+    const LAB_SEED = 0x9e3779b9;
+    const LAB_GOLDEN = 0.6180339887498949;
+    const labFract = (x) => x - Math.floor(x);
+    const LAB_SERIES = [
+        { k: 'random', id: 0, c: '#ff6b6b', label: 'Random' },
+        { k: 'stratified', id: 1, c: '#00ffcc', label: 'Stratified' },
+        { k: 'qmc', id: 2, c: '#7aa2ff', label: 'Quasi-MC' },
+        { k: 'importance', id: 3, c: '#ffe066', label: 'Importance' },
+        { k: 'reverse', id: 4, c: '#c084fc', label: 'Reverse' },
+    ];
+    let labWorker = null;
+    let labHann = null, labCurves = null, labTarget = null, labA = 0, labF0 = 0, labAudio = null;
+
+    const labCanvas = $('lab-canvas'), labCtx = labCanvas.getContext('2d');
+    const labRun = $('lab-run'), labReadout = $('lab-readout');
+    const labTargetBtn = $('lab-target'), labNoisyBtn = $('lab-noisy'), labCleanBtn = $('lab-clean'), labStopBtn = $('lab-stop');
+    const labCsvBtn = $('lab-csv');
+    function refreshLabTheme() {
+        const colors = [canvasTheme.accent, canvasTheme.accent2, canvasTheme.focus, canvasTheme.lineStrong, canvasTheme.muted];
+        LAB_SERIES.forEach((series, i) => { series.c = colors[i]; });
+    }
+    refreshLabTheme();
+    window.addEventListener('raydrone:theme', () => { refreshLabTheme(); if (typeof labDrawPlot === 'function') labDrawPlot(); });
+
+    function labGetHann() {
+        if (labHann) return labHann;
+        labHann = new Float32Array(LAB_GRAIN);
+        for (let n = 0; n < LAB_GRAIN; n++) labHann[n] = 0.5 * (1 - Math.cos(2 * Math.PI * n / (LAB_GRAIN - 1)));
+        return labHann;
+    }
+    const labS = (i) => (sampleData && i >= 0 && i < sampleData.length) ? sampleData[i] : 0;
+    const labTri = (u) => u < 0.5 ? -1 + Math.sqrt(2 * u) : 1 - Math.sqrt(2 * (1 - u));
+    function labU(method, i, N, rot) {
+        if (method === 'stratified') return (i + Math.random()) / N;
+        if (method === 'qmc') return labFract(rot + i * LAB_GOLDEN);
+        return Math.random();
+    }
+
+    // Objetivo determinista: target[n] = w[n] · Σ p(k)·s(f0+k+n)
+    function labComputeTarget(f0, A) {
+        const D = LAB_GRAIN, w = labGetHann(), out = new Float32Array(D), invA2 = 1 / (A * A);
+        for (let k = -A; k <= A; k++) {
+            const pk = (A - Math.abs(k)) * invA2;
+            if (pk <= 0) continue;
+            const b = f0 + k;
+            for (let n = 0; n < D; n++) out[n] += pk * labS(b + n);
+        }
+        for (let n = 0; n < D; n++) out[n] *= w[n];
+        return out;
+    }
+    function labImpSearch(cum, r) { let lo = 0, hi = cum.length - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (cum[m] < r) lo = m + 1; else hi = m; } return lo; }
+    function labBuildImp(f0, A) {
+        const len = 2 * A + 1, stride = 8, taps = Math.ceil(LAB_GRAIN / stride);
+        const pm = new Float32Array(len), qm = new Float32Array(len), cum = new Float32Array(len), en = new Float32Array(len), invA2 = 1 / (A * A);
+        let ps = 0, qs = 0, emax = 1e-6;
+        for (let idx = 0; idx < len; idx++) {
+            const k = idx - A, p = (A - Math.abs(k)) * invA2;
+            let s = 0; const b = f0 + k;
+            for (let n = 0; n < LAB_GRAIN; n += stride) { const v = labS(b + n); s += v * v; }
+            const e = Math.sqrt(s / taps) + 1e-6;
+            en[idx] = e; if (e > emax) emax = e;
+            pm[idx] = p; qm[idx] = p * e; ps += p; qs += p * e;
+        }
+        let acc = 0;
+        for (let idx = 0; idx < len; idx++) { pm[idx] /= ps; qm[idx] = qs > 0 ? qm[idx] / qs : 1 / len; acc += qm[idx]; cum[idx] = acc; }
+        return { pm, qm, cum, en, emax };
+    }
+    function labEstimate(f0, A, N, method, imp) {
+        const D = LAB_GRAIN, w = labGetHann(), out = new Float32Array(D), rot = Math.random();
+        if (method === 'importance' && imp) {
+            for (let i = 0; i < N; i++) {
+                const u = (i + Math.random()) / N, idx = labImpSearch(imp.cum, u), k = idx - A;
+                if (imp.qm[idx] <= 0) continue;
+                const wi = imp.pm[idx] / imp.qm[idx], b = f0 + k;
+                for (let n = 0; n < D; n++) out[n] += wi * labS(b + n);
+            }
+            const inv = 1 / N;
+            for (let n = 0; n < D; n++) out[n] *= inv * w[n];
+            return out;
+        }
+        if (method === 'reverse' && imp) {
+            // Muestreo exacto de q ∝ p·energía, sin reponderar: objetivo sesgado.
+            for (let i = 0; i < N; i++) {
+                const k = labImpSearch(imp.cum, Math.random()) - A;
+                const b = f0 + k;
+                for (let n = 0; n < D; n++) out[n] += labS(b + n);
+            }
+            const inv = 1 / N;
+            for (let n = 0; n < D; n++) out[n] *= inv * w[n];
+            return out;
+        }
+        for (let i = 0; i < N; i++) {
+            const u = labU(method, i, N, rot), k = Math.round(labTri(u) * A), b = f0 + k;
+            for (let n = 0; n < D; n++) out[n] += labS(b + n);
+        }
+        const inv = 1 / N;
+        for (let n = 0; n < D; n++) out[n] *= inv * w[n];
+        return out;
+    }
+    function labRms(a, t) { let s = 0; for (let n = 0; n < LAB_GRAIN; n++) { const d = a[n] - t[n]; s += d * d; } return Math.sqrt(s / LAB_GRAIN); }
+    function labFitSlope(Ns, ys) {
+        let n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+        for (let i = 0; i < Ns.length; i++) { if (ys[i] <= 0) continue; const x = Math.log10(Ns[i]), y = Math.log10(ys[i]); n++; sx += x; sy += y; sxx += x * x; sxy += x * y; }
+        return n < 2 ? NaN : (n * sxy - sx * sy) / (n * sxx - sx * sx);
+    }
+
+    function labRunTest() {
+        if (!sampleData) { labReadout.innerText = rayI18n.t('Carga un audio primero.'); return; }
+        if (!wasmBytes) { labReadout.innerText = rayI18n.t('Motor no iniciado: recarga el audio.'); return; }
+        labRun.disabled = true;
+        labReadout.innerText = rayI18n.t('Convergencia en wasm (motor real, semilla fija)…');
+        const t = clamp(parseFloat(charSlider.value) / 100, 0, 1);
+        const apSec = 0.02 + t * t * 0.6;
+        const A = Math.max(1, Math.min(LAB_MAX_A, Math.round(apSec * sampleRate)));
+        const f0 = Math.round(clamp(focusSec, 0, duration) * sampleRate);
+        if (labWorker) labWorker.terminate();
+        labWorker = new Worker('lab-worker.js');
+        labWorker.onerror = (err) => {
+            labReadout.innerText = `Error en el worker del Lab: ${err.message || err}`;
+            labRun.disabled = false;
+        };
+        labWorker.onmessage = (e) => {
+            const d = e.data;
+            if (d.type === 'progress') {
+                labReadout.innerText = `Convergencia (wasm)… ${d.done}/${d.total}`;
+            } else if (d.type === 'error') {
+                labReadout.innerText = `Error en el Lab (wasm): ${d.message}`;
+                labRun.disabled = false;
+            } else if (d.type === 'done') {
+                labTarget = d.target; labA = A; labF0 = f0;
+                labCurves = { Ns: LAB_NS, ...d.curves };
+                labDrawPlot(); labUpdateReadout();
+                labRun.disabled = false;
+                [labTargetBtn, labNoisyBtn, labCleanBtn, labStopBtn, labCsvBtn].forEach((b) => b.disabled = false);
+                labWorker.terminate(); labWorker = null;
+            }
+        };
+        labWorker.postMessage({
+            type: 'run',
+            wasmBytes, sample: sampleData, sampleRate,
+            f0, A, Ns: LAB_NS, trials: LAB_TRIALS, seed: LAB_SEED,
+            methods: LAB_SERIES.map((s) => ({ k: s.k, id: s.id })),
+        });
+    }
+
+    // Export CSV de las curvas del Lab (para las figuras del paper, reproducible).
+    function labExportCsv() {
+        if (!labCurves) return;
+        const Ns = labCurves.Ns;
+        let csv = `# RayDrone Convergence Lab\n`;
+        csv += `# aperture_ms=${(labA / sampleRate * 1000).toFixed(1)}, grain=${LAB_GRAIN}, trials=${LAB_TRIALS}, focus_s=${(labF0 / sampleRate).toFixed(3)}, sr=${sampleRate}, impl=wasm-engine, seed=0x${LAB_SEED.toString(16)}\n`;
+        csv += `# slopes: ${LAB_SERIES.map((s) => `${s.k}=${labFitSlope(Ns, labCurves[s.k]).toFixed(4)}`).join(', ')}\n`;
+        csv += 'N,' + LAB_SERIES.map((s) => s.k).join(',') + '\n';
+        for (let i = 0; i < Ns.length; i++) {
+            csv += Ns[i] + ',' + LAB_SERIES.map((s) => labCurves[s.k][i].toExponential(6)).join(',') + '\n';
+        }
+        downloadBlob(new Blob([csv], { type: 'text/csv' }), `raydrone-convergence-${Date.now()}.csv`);
+    }
+
+    function labUpdateReadout() {
+        const Ns = labCurves.Ns, last = Ns.length - 1, f = (v) => v.toExponential(2);
+        let html = `<pre class="lab-results">`;
+        html += `apertura ${(labA / sampleRate * 1000).toFixed(0)} ms · grano ${LAB_GRAIN} · N→${Ns[last]} · ${LAB_TRIALS} tiradas\n`;
+        html += `método        exponente   RMS@${Ns[last]}\n`;
+        for (const s of LAB_SERIES) {
+            const sl = labFitSlope(Ns, labCurves[s.k]);
+            html += `<span class="lab-series">${s.label.padEnd(12)} ${sl.toFixed(3).padStart(7)}   ${f(labCurves[s.k][last])}</span>\n`;
+        }
+        html += `<span class="lab-note">(ideal random ≈ −0.50; stratified/QMC/importance bajan más; Reverse ≈ random en material uniforme — su sesgo solo aflora como meseta si la energía dentro de la apertura es muy desigual)</span></pre>`;
+        labReadout.innerHTML = html;
+    }
+
+    function labDrawPlot() {
+        const W = labCanvas.width, H = labCanvas.height, padL = 52, padR = 10, padT = 12, padB = 26;
+        labCtx.clearRect(0, 0, W, H);
+        labCtx.fillStyle = canvasTheme.bg; labCtx.fillRect(0, 0, W, H);
+        if (!labCurves) {
+            labCtx.fillStyle = canvasColor('text', 0.3); labCtx.font = '12px monospace';
+            labCtx.fillText('Corre el test para ver la curva de convergencia', padL, H / 2);
+            return;
+        }
+        const Ns = labCurves.Ns;
+        let ymin = Infinity, ymax = -Infinity;
+        for (const s of LAB_SERIES) for (const v of labCurves[s.k]) if (v > 0) { const ly = Math.log10(v); if (ly < ymin) ymin = ly; if (ly > ymax) ymax = ly; }
+        if (!isFinite(ymin)) { ymin = -4; ymax = 0; }
+        ymin = Math.floor(ymin - 0.2); ymax = Math.ceil(ymax + 0.2);
+        const xmax = Math.log2(Ns[Ns.length - 1]);
+        const X = (N) => padL + Math.log2(N) / xmax * (W - padL - padR);
+        const Y = (e) => padT + (ymax - Math.log10(e)) / (ymax - ymin) * (H - padT - padB);
+        labCtx.font = '10px monospace';
+        for (let d = ymin; d <= ymax; d++) {
+            const y = Y(Math.pow(10, d));
+            labCtx.strokeStyle = canvasColor('line', 0.07); labCtx.beginPath(); labCtx.moveTo(padL, y); labCtx.lineTo(W - padR, y); labCtx.stroke();
+            labCtx.fillStyle = canvasColor('muted', 0.45); labCtx.fillText(`1e${d}`, 6, y + 3);
+        }
+        for (const N of Ns) { const x = X(N); labCtx.fillStyle = canvasColor('muted', 0.4); labCtx.fillText(String(N), x - 6, H - padB + 14); }
+        // ideal 1/√N
+        const anchor = labCurves.random[0];
+        if (anchor > 0) {
+            labCtx.strokeStyle = canvasColor('lineStrong', 0.35); labCtx.setLineDash([5, 4]); labCtx.beginPath();
+            for (let i = 0; i < Ns.length; i++) { const e = anchor / Math.sqrt(Ns[i] / Ns[0]); const px = X(Ns[i]), py = Y(e); i === 0 ? labCtx.moveTo(px, py) : labCtx.lineTo(px, py); }
+            labCtx.stroke(); labCtx.setLineDash([]);
+        }
+        for (const s of LAB_SERIES) {
+            const data = labCurves[s.k]; labCtx.strokeStyle = s.c; labCtx.lineWidth = 1.8; labCtx.beginPath();
+            let started = false;
+            for (let i = 0; i < Ns.length; i++) { if (data[i] <= 0) continue; const px = X(Ns[i]), py = Y(data[i]); started ? labCtx.lineTo(px, py) : (labCtx.moveTo(px, py), started = true); }
+            labCtx.stroke();
+            labCtx.fillStyle = s.c;
+            for (let i = 0; i < Ns.length; i++) { if (data[i] <= 0) continue; labCtx.beginPath(); labCtx.arc(X(Ns[i]), Y(data[i]), 2, 0, Math.PI * 2); labCtx.fill(); }
+        }
+        labCtx.lineWidth = 1;
+        let lx = padL + 6; const ly = padT + 8;
+        for (const s of LAB_SERIES) { labCtx.fillStyle = s.c; labCtx.fillRect(lx, ly - 7, 10, 3); labCtx.fillStyle = canvasColor('text', 0.7); labCtx.fillText(s.label, lx + 13, ly); lx += 13 + labCtx.measureText(s.label).width + 14; }
+    }
+
+    function labStop() { if (labAudio) { try { labAudio.stop(); } catch (e) {} try { labAudio.disconnect(); } catch (e) {} labAudio = null; } }
+    async function labPlay(kind) {
+        if (!labTarget) return;
+        await ensureEngine();
+        if (ctx.state === 'suspended') await ctx.resume();
+        labStop();
+        let g;
+        if (kind === 'target') g = labTarget;
+        else if (kind === 'noisy') g = labEstimate(labF0, labA, 4, 'random', null);
+        else g = labEstimate(labF0, labA, 256, 'random', null);
+        let peak = 1e-6;
+        for (let n = 0; n < labTarget.length; n++) peak = Math.max(peak, Math.abs(labTarget[n]));
+        const norm = 0.7 / peak;
+        const buf = ctx.createBuffer(1, g.length, sampleRate);
+        const ch = buf.getChannelData(0);
+        for (let n = 0; n < g.length; n++) ch[n] = g[n] * norm;
+        const s = ctx.createBufferSource();
+        s.buffer = buf; s.loop = true; s.connect(jsGain); s.start();
+        labAudio = s;
+    }
+
+    labRun.addEventListener('click', labRunTest);
+    labTargetBtn.addEventListener('click', () => labPlay('target'));
+    labNoisyBtn.addEventListener('click', () => labPlay('noisy'));
+    labCleanBtn.addEventListener('click', () => labPlay('clean'));
+    labStopBtn.addEventListener('click', labStop);
+    labCsvBtn.addEventListener('click', labExportCsv);
+    labDrawPlot();
+
+    // ── Modo live: escenas por tecla (1–9) + leyenda HUD + toggles ───────────
+    const hud = $('hud'), hudScenes = $('hud-scenes'), hudTags = $('hud-tags');
+    const hudKey = (label, on) => `<b class="hud-key${on ? ' active' : ''}">${label}</b>`;
+    function updateHud() {
+        hudScenes.innerHTML = presets.map((b, i) =>
+            `${hudKey(i + 1, b.classList.contains('active'))} ${b.textContent.split('(')[0].trim()}`).join('  ·  ');
+        hudTags.innerHTML = `${hudKey('S', liveSpectrum)} espectro · ${hudKey('R', liveRadial)} radial · `
+            + `<b class="hud-key">H</b> ocultar · <b class="hud-key">⛶/F</b> pantalla`;
+    }
+    updateHud();
+    hud.style.display = 'none'; // oculta por defecto; se muestra sola en pantalla completa
+    function syncHudToFs() {
+        hudShown = (document.fullscreenElement || document.webkitFullscreenElement) === vizWrap;
+        hud.style.display = hudShown ? '' : 'none';
+    }
+    document.addEventListener('fullscreenchange', syncHudToFs);
+    document.addEventListener('webkitfullscreenchange', syncHudToFs);
+    presets.forEach((b) => b.addEventListener('click', () => setTimeout(updateHud, 0)));
+
+    // Foco "real" de entrada de texto (para no robarle teclas a un <select> o a
+    // un futuro campo de texto). Los <input type="range"/"checkbox"> NO cuentan:
+    // se navegan con flechas/espacio, no con letras, así que dejarlos pasar aquí
+    // bloqueaba el piano (y los atajos 1-9/s/r/h/f) cada vez que el usuario había
+    // tocado un slider justo antes — es decir, casi siempre.
+    function isTextEntryTarget(el) {
+        if (!el) return false;
+        const tag = el.tagName;
+        if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+        if (tag === 'INPUT') {
+            const t = (el.type || 'text').toLowerCase();
+            return !['range', 'checkbox', 'radio', 'button'].includes(t);
+        }
+        return false;
+    }
+    // Los botones (Play/Pause, presets, OCT, avanzado…) no deben quedarse con
+    // el foco de teclado tras un clic con ratón: si no, una pulsación suelta de
+    // Espacio (o Enter) — p. ej. mientras se toca el piano con varios dedos —
+    // vuelve a activar el ÚLTIMO botón pulsado (típicamente Play/Pause) en vez
+    // de no hacer nada. El teclado sigue funcionando con Tab + Espacio/Enter.
+    document.addEventListener('mousedown', (e) => {
+        if (e.target.closest('button')) e.preventDefault();
+    });
+
+    // ── Piano: teclado / ratón / táctil (toca acordes: varias notas a la vez) ──
+    const PIANO_LO = 48, PIANO_HI = 76; // C3..D#5 (igual rango que el piano del VST)
+    const isBlackKey = (n) => [1, 3, 6, 8, 10].includes(((n % 12) + 12) % 12);
+    const pianoEl = $('piano');
+    const poctDownBtn = $('poct-down'), poctUpBtn = $('poct-up'), poctV = $('poct-v');
+    let playOctave = 0;
+
+    // Tecla física (minúscula) -> semitono desde C4 (MIDI 60), como el piano del VST.
+    // 's' (D4), 'f' (F4) y 'h' (A4) quedan fuera del teclado: esas letras ya son
+    // atajos de esta página (espectro, pantalla completa, HUD) — se tocan con
+    // clic/táctil directamente sobre el piano.
+    const KB_MAP = {
+        a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6, g: 7,
+        y: 8, u: 10, j: 11, k: 12, o: 13, l: 14, h: 9,
+    };
+    const KB_RESERVED = new Set(['s', 'f', 'h']);
+
+    const heldKeyboard = new Set();   // notas MIDI sostenidas desde el teclado físico
+    const heldPointer = new Set();    // notas MIDI sostenidas desde ratón/táctil
+    const kbActiveNote = new Map();   // tecla física -> nota que encendió (evita notas "pegadas" si cambias de octava a media pulsación)
+    const pointerActiveNote = new Map(); // pointerId -> nota (soporta multi-touch para acordes con los dedos)
+
+    function sendKeys() {
+        if (!node) return;
+        const held = new Set([...heldKeyboard, ...heldPointer]);
+        const ratios = [...held].sort((a, b) => a - b).map((n) => Math.pow(2, (n - 60) / 12));
+        node.port.postMessage({ type: 'keys', data: Float32Array.from(ratios) });
+    }
+    function paintPiano() {
+        const held = new Set([...heldKeyboard, ...heldPointer]);
+        pianoEl.querySelectorAll('.piano-key').forEach((el) => {
+            el.classList.toggle('on', held.has(+el.dataset.note));
+        });
+    }
+
+    function buildPiano() {
+        pianoEl.innerHTML = '';
+        const whites = [];
+        for (let n = PIANO_LO; n < PIANO_HI; n++) if (!isBlackKey(n)) whites.push(n);
+        const ww = 100 / whites.length; // % de ancho por tecla blanca
+        whites.forEach((n, i) => {
+            const el = document.createElement('div');
+            el.className = 'piano-key white';
+            el.dataset.note = n;
+            el.style.left = `${i * ww}%`;
+            el.style.width = `${ww}%`;
+            pianoEl.appendChild(el);
+        });
+        for (let n = PIANO_LO; n < PIANO_HI; n++) {
+            if (!isBlackKey(n)) continue;
+            const belowWhiteIdx = whites.filter((w) => w < n).length - 1;
+            const el = document.createElement('div');
+            el.className = 'piano-key black';
+            el.dataset.note = n;
+            el.style.left = `${(belowWhiteIdx + 1) * ww - ww * 0.3}%`;
+            el.style.width = `${ww * 0.6}%`;
+            pianoEl.appendChild(el);
+        }
+    }
+    buildPiano();
+
+    pianoEl.addEventListener('pointerdown', (e) => {
+        const key = e.target.closest('.piano-key');
+        if (!key) return;
+        e.preventDefault();
+        pianoEl.setPointerCapture(e.pointerId);
+        const n = +key.dataset.note;
+        pointerActiveNote.set(e.pointerId, n);
+        heldPointer.add(n);
+        paintPiano();
+        sendKeys();
+    });
+    function releasePointerNote(e) {
+        const n = pointerActiveNote.get(e.pointerId);
+        if (n === undefined) return;
+        pointerActiveNote.delete(e.pointerId);
+        if (![...pointerActiveNote.values()].includes(n)) heldPointer.delete(n);
+        paintPiano();
+        sendKeys();
+    }
+    pianoEl.addEventListener('pointerup', releasePointerNote);
+    pianoEl.addEventListener('pointercancel', releasePointerNote);
+    pianoEl.addEventListener('pointerleave', releasePointerNote);
+
+    function setOctave(o) {
+        playOctave = Math.max(-2, Math.min(2, o));
+        poctV.innerText = `${playOctave > 0 ? '+' : ''}${playOctave}`;
+    }
+    poctDownBtn.addEventListener('click', () => setOctave(playOctave - 1));
+    poctUpBtn.addEventListener('click', () => setOctave(playOctave + 1));
+    setOctave(0);
+
+    window.addEventListener('keydown', (e) => {
+        if (e.repeat) return;
+        if (isTextEntryTarget(e.target)) return;
+        const k = e.key.toLowerCase();
+        if (KB_RESERVED.has(k) || !(k in KB_MAP)) return;
+        const n = 60 + KB_MAP[k] + playOctave * 12;
+        if (n < 0 || n > 127) return;
+        kbActiveNote.set(k, n);
+        heldKeyboard.add(n);
+        paintPiano();
+        sendKeys();
+    });
+    window.addEventListener('keyup', (e) => {
+        const k = e.key.toLowerCase();
+        const n = kbActiveNote.get(k);
+        if (n === undefined) return;
+        kbActiveNote.delete(k);
+        heldKeyboard.delete(n);
+        paintPiano();
+        sendKeys();
+    });
+    // Si la pestaña pierde el foco (p.ej. alt-tab) con una tecla físicamente
+    // pulsada, nunca llega el keyup correspondiente → la nota quedaría "pegada".
+    window.addEventListener('blur', () => {
+        if (kbActiveNote.size === 0) return;
+        kbActiveNote.clear();
+        heldKeyboard.clear();
+        paintPiano();
+        sendKeys();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (isTextEntryTarget(e.target)) return;
+        // Espacio = Play/Pause explícito (convención de cualquier reproductor),
+        // en vez de depender de que el botón se quedara con el foco (por eso
+        // antes a veces "funcionaba" sin querer, y ahora que eso está arreglado
+        // no hacía nada en absoluto).
+        if (e.code === 'Space' || e.key === ' ') {
+            if (!playBtn.disabled) playBtn.click();
+            e.preventDefault();
+            return;
+        }
+        const k = e.key.toLowerCase();
+        if (k >= '1' && k <= '9') { const i = +k - 1; if (presets[i]) presets[i].click(); }
+        else if (k === 's') { liveSpectrum = !liveSpectrum; updateHud(); }
+        else if (k === 'r') { liveRadial = !liveRadial; updateHud(); }
+        else if (k === 'h') { hudShown = !hudShown; hud.style.display = hudShown ? '' : 'none'; }
+        else if (k === 'f') { fsBtn.click(); }
+        else return;
+        e.preventDefault();
+    });
+
+    // Las decisiones se muestran como botones persistentes. Los selectores
+    // permanecen ocultos como contrato estable con el motor y el i18n.
+    const segmentedSelectSync = new WeakMap();
+    function mountSegmentedSelect(select) {
+        const group = document.createElement('div');
+        group.className = 'segmented-picker';
+        group.setAttribute('role', 'group');
+        group.setAttribute('aria-label', select.previousElementSibling?.textContent?.trim() || select.id);
+        const buttons = Array.from(select.options, (option) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'segmented-option';
+            button.dataset.value = option.value;
+            button.textContent = option.textContent;
+            button.addEventListener('click', () => {
+                if (select.value === option.value) return;
+                select.value = option.value;
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            group.appendChild(button);
+            return button;
+        });
+        const sync = () => buttons.forEach((button) => {
+            const active = button.dataset.value === select.value;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-pressed', String(active));
+        });
+        segmentedSelectSync.set(select, sync);
+        select.classList.add('engine-select');
+        select.insertAdjacentElement('afterend', group);
+        select.addEventListener('change', sync);
+        sync();
+    }
+    function syncSegmentedSelect(select) {
+        segmentedSelectSync.get(select)?.();
+    }
+    ['mod-mode', 'mod-target', 'voicing', 'scale', 'chord', 'lfodiv', 'compare-fx']
+        .map($)
+        .forEach(mountSegmentedSelect);
+
+    window.addEventListener('raydrone:language', () => {
+        // Recalcular los valores que se generan desde el estado, no solo los
+        // nodos estáticos que actualiza i18n.js.
+        charV.innerText = charWord();
+        simpleCharacterV.textContent = charWord();
+        simpleMotionV.textContent = motionWord(parseFloat(simpleMotion.value));
+        simpleSpaceV.textContent = spaceWord(parseFloat(simpleSpace.value));
+        updateBasicSummary();
+        updateComparison();
+    });
+
+    charV.innerText = charWord();
+    requestAnimationFrame(frame);
+    </script>
+</body>
+</html>

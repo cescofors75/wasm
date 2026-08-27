@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "WASM: build",
+      "type": "shell",
+      "command": "& .\\build.ps1",
+      "group": "build"
+    },
+    {
+      "label": "WASM: serve 8080",
+      "type": "shell",
+      "command": "$py = Get-Command python.exe -ErrorAction SilentlyContinue; if (!$py) { $py = Get-Command py.exe -ErrorAction SilentlyContinue }; if (!$py) { throw 'Python no encontrado. Instala Python o habilita el launcher py.exe.' }; & $py.Source -m http.server 8080",
+      "isBackground": true
+    },
+    {
+      "label": "WASM: build + serve (8080)",
+      "type": "shell",
+      "command": "& .\\build.ps1 -Serve -Port 8080",
+      "isBackground": true
+    }
+  ]
+}
