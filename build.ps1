@@ -32,9 +32,10 @@ function Resolve-CommandPath {
 
 $rustupPath = Resolve-CommandPath -PrimaryPath (Join-Path $env:USERPROFILE '.cargo/bin/rustup.exe') -CommandName 'rustup.exe'
 $rustcPath = Resolve-CommandPath -PrimaryPath (Join-Path $env:USERPROFILE '.cargo/bin/rustc.exe') -CommandName 'rustc.exe'
-$coreTemp = 'libraydrone_core.tmp.rlib'
-$coreSource = Join-Path $scriptDir '..\core\src\lib.rs'
-$wasmTemp = 'raydrone.tmp.wasm'
+$null = New-Item -ItemType Directory -Force '.build'
+$coreTemp = '.build/libraydrone_core.tmp.rlib'
+$coreSource = Join-Path $scriptDir 'core\src\lib.rs'
+$wasmTemp = '.build/raydrone.tmp.wasm'
 
 Remove-Item $coreTemp, $wasmTemp -Force -ErrorAction SilentlyContinue
 
@@ -85,7 +86,7 @@ try {
         raydrone.rs -o $wasmTemp
     if ($LASTEXITCODE -ne 0) { throw "rustc wasm fallo con codigo $LASTEXITCODE" }
 
-    Move-Item -Force $coreTemp libraydrone_core.rlib
+    Move-Item -Force $coreTemp .build/libraydrone_core.rlib
     Move-Item -Force $wasmTemp raydrone.wasm
 } finally {
     Remove-Item $coreTemp, $wasmTemp -Force -ErrorAction SilentlyContinue

@@ -29,6 +29,19 @@ RayDroneSDK.registerScene('camara-de-cristal', {
 RayDroneSDK.applyScene(node.port, 'camara-de-cristal');
 ```
 
+Las escenas solo admiten los seis parámetros del ejemplo. Se rechazan campos
+desconocidos y valores no finitos antes de enviar mensajes. Si se especifica
+`params` parcialmente, se completa con `focus: 0`, `aperture: 0.1`,
+`grainMs: 150`, `grainRate: 200`, `gain: 0.3`, `master: 1`; no es una operación
+de actualización parcial del estado del host. Omitir `params` conserva esos
+controles. El feedback de delay se limita a 0.68 y la mezcla de reverb a 0.82,
+igual que en el motor. Las definiciones registradas se guardan como snapshots.
+
+Los identificadores de voicing v1 son: 0 unísono/continuo, 1 octavas,
+2 Power pad, 3 tríada mayor, 4 tríada menor, 5 quintas apiladas, 6 sus2,
+7 pentatónica, 8 escala mayor justa y 9 escala menor justa. La tabla de ratios
+vive en `core/src/lib.rs` y se comprueba contra el WASM en las pruebas.
+
 ## Materiales integrados
 
 | Constante | Comportamiento |

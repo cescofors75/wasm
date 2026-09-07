@@ -1,0 +1,16 @@
+RMS: amplitude <= 1e-6 implies error <= 2e-6; reported: 0.0078125
+Chord 1 ratios: [ 1, 1.25, 1.5 ]
+Chord 2 ratios: [ 1, 1.2000000476837158, 1.5 ]
+Chord 3 ratios: [ 1, 1.125, 1.5 ]
+Chord 9 ratios: [ 1 ]
+loadAudioBuffer sendParams active: false
+After replacing a playing sample: isPlaying = true button = ▶ Play
+Engine initialization attempt 1 temporary module failure
+Engine initialization attempt 2 processor not registered
+addModule calls over two attempts: 1
+Envelope 1ms after 400 blocks: last block energy 6.922257523586008e-29 pitch metric NaN
+New silent sample while direct was playing, output peak: 0.1287621110677719
+Discrete triangular target A=1: 1 QMC estimate N=262144: 0.7499961853027344
+220 Hz tone with cutoff=1000 Hz, attenuation dB: -4.69789835802682
+Resonance=1 vs 0 gain ratio: 1.1499148182603756
+Spawn rate after switching to direct: 20132656791.5625

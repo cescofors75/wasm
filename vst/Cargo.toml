@@ -28,7 +28,7 @@ standalone = ["nih_plug/standalone", "jack/dynamic_loading"]
 
 [dependencies]
 # Shared DSP kernel (same code the WASM engine links). Path dep, no crates.io.
-raydrone_core = { path = "../../core" }
+raydrone_core = { path = "../core" }
 # Pinned to the exact commit already locked in Cargo.lock, so an incidental
 # `cargo update` can't silently move both crates to a different upstream
 # revision out from under the lockfile.

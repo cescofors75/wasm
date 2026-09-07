@@ -562,6 +562,17 @@ pub extern "C" fn set_sample(len: usize, sr: f32) {
         SOURCE_SR = if sr.is_finite() && sr > 1.0 { sr } else { 44100.0 };
     }
     reset_runtime_state();
+    unsafe {
+        DIRECT_ON = 0; DIRECT_POS = 0.0; DIRECT_TONE = 0.0; DIRECT_PHASE = 0.0;
+        GRAIN_RATE = 0.0;
+        MOD_ENV = 0.0; MOD_PHASE = 0.0;
+        DELAY_L.fill(0.0); DELAY_R.fill(0.0); DELAY_W = 0;
+        RAY_L.fill(0.0); RAY_R.fill(0.0); RAY_W = 0;
+        RAY_TONE_L = 0.0; RAY_TONE_R = 0.0;
+        RES_L.fill(0.0); RES_R.fill(0.0); RES_W = 0;
+        PH_L.fill(0.0); PH_R.fill(0.0);
+        CHORUS_PHASE = 0.0; FLANGER_PHASE = 0.0; PHASER_PHASE = 0.0;
+    }
     build_energy();
 }
 
@@ -1133,15 +1144,6 @@ fn fract64(x: f64) -> f64 {
 }
 
 #[inline]
-fn roundi(x: f32) -> i64 {
-    if x >= 0.0 {
-        (x + 0.5) as i64
-    } else {
-        -(((-x) + 0.5) as i64)
-    }
-}
-
-#[inline]
 fn lab_clamp_a(a: i32) -> i32 {
     if a < 1 {
         1
@@ -1316,7 +1318,7 @@ pub extern "C" fn lab_estimate(f0: i32, a: i32, n_rays: u32, method: u32, sd: u3
                     2 => fract64(rot + (i as f64) * LAB_GOLDEN64) as f32,
                     _ => rng01(),
                 };
-                let k = roundi(tri_inv(u) * (a as f32));
+                let k = raydrone_core::discrete_tri_offset(u as f64, a) as i64;
                 let b = f0 as i64 + k;
                 for m in 0..LAB_D {
                     LAB_EST[m] += lab_s(b + m as i64);
@@ -1998,7 +2000,9 @@ pub extern "C" fn process(frames: usize) {
         let blk = s / (n as f32);
         ENV = ENV * 0.9 + blk * 0.1;
         let coeff = if blk > MOD_ENV { 1.0 / (MOD_ATTACK * OUTPUT_SR).max(1.0) } else { 1.0 / (MOD_RELEASE * OUTPUT_SR).max(1.0) };
-        MOD_ENV += (blk - MOD_ENV) * coeff * (n as f32);
+        // Compose the stable per-sample follower over n frames.
+        let mix = 1.0 - powf_i(1.0 - coeff.min(1.0), n as u32);
+        MOD_ENV = clampf(MOD_ENV + (blk - MOD_ENV) * mix, 0.0, 1.0);
         if FEEDBACK > 0.0 {
             // Barrido más lento y menos dependiente del nivel → evoluciona en vez de saltar.
             let step = FEEDBACK * (0.0004 + ENV * 0.0018);

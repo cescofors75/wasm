@@ -23,14 +23,32 @@ Abre `http://localhost:8080/`. AudioWorklet requiere HTTP local o HTTPS.
 | `raydrone.rs` | Motor granular Rust `no_std`. |
 | `processor.js` | Puente entre Web Audio y WASM. |
 | `lab-worker.js` | Cálculos de convergencia fuera de la UI. |
-| `build.ps1` / `build.sh` | Compilación del núcleo y del WASM. |
+| `core/` | Núcleo DSP compartido y versionado con WASM y VST. |
+| `build.ps1` / `build.sh` | Compilación del núcleo y del WASM; intermedios en `.build/`. |
 
 ## Verificación
 
 ```powershell
-.\build.ps1
-node test_engine.mjs
+node test_all.mjs
 ```
+
+Requiere Node.js 24, Rust y el target `wasm32-unknown-unknown`
+(`rustup target add wasm32-unknown-unknown`). El comando recompila desde el
+código del repositorio, ejecuta las tres suites originales y las regresiones
+de `tests/`. No depende de un directorio `core` externo.
+
+Las regresiones cubren precisión numérica, envolvente, acordes, filtro,
+convergencia, cambios de fuente, inicialización, telemetría, SDK y liberación
+de recursos GPU. El motor del VST también se ejecuta bajo WASM para comprobar
+su DSP sin requerir un SDK nativo; esto no sustituye las pruebas del plugin:
+
+```powershell
+cargo test --manifest-path vst/Cargo.toml --locked --lib
+```
+
+En Windows, estas últimas necesitan Visual Studio Build Tools con C++ y Windows
+SDK. [CI](.github/workflows/test.yml) comprueba WASM desde un checkout limpio
+en Linux y las pruebas del VST en Windows; no publica releases automáticamente.
 
 ## Test perceptual Top-36
 

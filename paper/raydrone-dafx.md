@@ -107,12 +107,15 @@ process is not derived here.
 For each method: one paragraph (what it is in graphics) + how it maps to grains.
 
 ### 4.1 Stratified sampling
-Partition `[-A,A]` into N strata, draw one `τ` per stratum → removes clumping,
+Partition the unit CDF domain into N strata and transform each draw through
+the inverse discrete triangular CDF → removes clumping,
 variance falls faster than pure random.
 
 ### 4.2 Quasi-Monte Carlo (QMC)
-Golden-ratio additive recurrence (`τ_i = frac(τ_0 + i·φ)·2A − A`) with
-Cranley–Patterson rotation → low-discrepancy coverage of the aperture.
+Golden-ratio additive recurrence (`u_i = frac(u_0 + i·φ)`) with
+Cranley–Patterson rotation, followed by the inverse discrete triangular CDF
+→ low-discrepancy coverage of the target distribution. Rounding a continuous
+triangular draw would give different bin masses, especially for small apertures.
 
 ### 4.3 Importance sampling
 Draw `τ ∝ q(τ)` where `q` follows local source energy, and **reweight by
@@ -155,8 +158,8 @@ with the square root of expected MSE at small trial counts.
 - **On strongly structured material** (run 5: a source whose aperture straddles a
   loud/near-silent boundary), the bias term dominates at large N and the curve
   approaches a floor: between N = 8192 and 32768 reverse's local slope is about
-  −0.10 while random's is about −0.45. At N = 32768, reverse error is 3.22·10⁻³
-  and reweighted importance error is 9.67·10⁻⁶, about 333× lower in this
+  −0.10 while random's is about −0.67. At N = 32768, reverse error is 3.14·10⁻³
+  and reweighted importance error is 9.84·10⁻⁶, about 319× lower in this
   constructed condition.
 
 We present the pair as a worked example of bias vs. variance, and argue reverse

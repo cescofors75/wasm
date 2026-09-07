@@ -60,6 +60,14 @@ class RayDroneProcessor extends AudioWorkletProcessor {
         }
     }
 
+    resetTelemetry() {
+        this.lastW = this.ex.slog_w() >>> 0;
+        this.lastSpawn = this.ex.spawn_count() >>> 0;
+        this.spawnRateSmooth = 0;
+        this.blockCount = 0; this.cpuAcc = 0; this.cpuBlocks = 0;
+        this.rayOff.length = 0; this.rayBand.length = 0; this.rayRatio.length = 0;
+    }
+
     handleMsg(d) {
         const ex = this.ex;
         if (d.type === 'sample') {
@@ -67,6 +75,7 @@ class RayDroneProcessor extends AudioWorkletProcessor {
             const len = Math.min(d.data.length, cap);
             new Float32Array(this.mem.buffer, ex.sample_ptr(), len).set(d.data.subarray(0, len));
             ex.set_sample(len, d.sampleRate);
+            this.resetTelemetry();
             this.ready = true;
             // Avisar a la UI si el sample no cabe entero (truncado silencioso, no más)
             this.port.postMessage({ type: 'sampleinfo', used: len, total: d.data.length, truncated: d.data.length > cap });
@@ -90,6 +99,7 @@ class RayDroneProcessor extends AudioWorkletProcessor {
             ex.set_params(d.focus, d.aperture, d.grainMs, d.grainRate, d.gain, d.master);
         } else if (d.type === 'direct') {
             ex.set_direct(d.on >>> 0, d.offsetSec);
+            if (d.on >>> 0) this.resetTelemetry();
         } else if (d.type === 'mode') {
             ex.set_mode(d.value >>> 0);
         } else if (d.type === 'fx') {
@@ -203,7 +213,7 @@ class RayDroneProcessor extends AudioWorkletProcessor {
                 let count = (w - this.lastW) >>> 0;
                 if (count > cap) count = cap;
                 for (let k = 0; k < count; k++) {
-                    const idx = (this.lastW + k) % cap;
+                    const idx = ((w - count + k) >>> 0) % cap;
                     this.rayOff.push(off[idx]);
                     this.rayBand.push(bnd[idx]);
                     this.rayRatio.push(rat[idx]);

@@ -1,0 +1,180 @@
+  ✓  exports the fixed window capacity  — 2048 samples
+  ✓  exports a block capacity >= AudioWorklet quantum  — 256 samples
+  ✓  exports configurable ray population
+  ✓  uses 2K as the default musical population  — 2000 rays
+  ✓  uses 25% as the default musical inertia  — 0.25
+  ✓  accepts the 8K research population  — 8000 rays
+  ✓  accepts bounded Top-36 inertia  — 0.3499999940395355
+RayDrone WASM engine — headless functional test
+
+[dry drone]
+  ✓  output is finite (no NaN/Inf)  — 0 bad samples
+  ✓  output is audible (rms > 1e-4)  — rms=1.20e-1
+  ✓  output within soft-clip bounds (peak <= 0.7)  — peak=0.3588
+  ✓  rays are spawning  — 2345 grains
+  ✓  voices are active  — 36 voices
+  ✓  granular output is hard-limited to Top-36  — 36 voices
+  ✓  simulation population is reported separately  — 512 simulated / 36 audible
+  ✓  simulation fills its configured population independently of audible voices  — 512 / 512 rays
+  ✓  Top-36 retention is finite and bounded  — 8.12%
+  ✓  Top-36 entry/exit counters are exported
+  ✓  Top-36 physical descriptors are finite
+
+[reverb tail]
+  ✓  reverb leaves a decaying tail after rays stop  — tail rms=7.10e-3
+  ✓  tail stays finite
+
+[microtonal scale]
+  ✓  renders cleanly with a microtonal scale  — rms=6.93e-2
+
+[held keys — computer-keyboard/mouse piano, chords]
+  ✓  renders cleanly with keys held  — rms=7.03e-2
+
+[source endpoint]
+  ✓  focus at the source endpoint renders the final audible region  — rms=1.26e-1
+  ✓  held keys override the microtonal scale (bit-for-bit different render)  — scale-only sum=2.947e+0 vs keys-held sum=2.847e+0
+
+[ambient constellation + smart rays + bounces]
+  ✓  ambient/smart/bounces render finite audio  — 0 bad
+  ✓  ambient is audible  — rms=6.06e-2
+  ✓  focus constellation is populated  — 3 foci alive
+
+[resonant filter — set_filter through the real process()]
+  ✓  low cutoff attenuates the signal (filter is in the path)  — rms open=1.14e-1 → low=2.89e-2
+
+[materials, modulation and spatial effects]
+  ✓  material/modulation/effects chain stays finite  — 0 bad samples
+  ✓  material/modulation/effects chain remains audible  — rms=5.63e-2
+
+[original ray direct — same WASM acoustic path]
+  ✓  exports and renders Original as a direct ray through WASM  — rms=4.51e-2
+  ✓  material + movement + FX audibly alter the rendered signal  — mean abs difference=9.54e-2
+  ✓  Delay feedback is inaudible when Delay wet is zero  — mean abs difference=0.00e+0
+
+[convergence lab — the offline estimator]
+  ✓  estimator converges (more rays → less error)  — err: 4.23e-2 (64) → 3.51e-4 (4096)
+  ✓  importance stays finite at N=65536 (edge-bin 0/0 regression)  — err=3.73e-6
+
+[ABI guards]
+  ✓  empty process block preserves a finite meter  — level=0.04008578509092331
+  ✓  non-finite grain rate is rejected without hanging
+  ✓  non-finite pitch falls back to finite audio
+  ✓  all floating-point ABI setters reject non-finite values
+
+✅ ALL PASSED
+RayDrone acoustic ray tracer — CPU reference
+
+  ✓  IR has the right length
+  ✓  IR is finite (no NaN/Inf)
+  ✓  IR carries energy  — Σe²=1.11e+1
+  ✓  direct sound arrives near |src-lis|/c  — direct≈13.0ms, first hit=13.0ms
+  ✓  more absorption → shorter tail  — tail: dead=71ms < live=321ms
+  ✓  same seed → identical IR (reproducible)
+
+✅ ALL PASSED
+RayDrone buffer ray-tracer — CPU reference (the estimator)
+
+     N=   16  err=1.144e-2
+     N=   64  err=9.818e-3
+     N=  256  err=2.231e-3
+     N= 1024  err=4.267e-4
+     N= 4096  err=1.649e-4
+  ✓  error decreases monotonically with N
+  ✓  high-N estimate is close to the analytic target  — 1.14e-2 → 1.65e-4
+  ✓  golden QMC beats random at equal N  — QMC=2.21e-3 < random=1.95e-2
+  ✓  same seed → identical render (reproducible)
+  ✓  render is finite
+
+✅ ALL PASSED
+✔ WASM builds from an isolated source checkout with no external core (3484.0553ms)
+✔ sqrt accuracy spans subnormal through maximum finite f32 (7.8009ms)
+✔ octave exponent matches 2^x throughout modulation range (1.534ms)
+✔ two-octave filter modulation spans cutoff/4 through cutoff*4 (1.2891ms)
+✔ VST engine scenario 0, 44100 Hz (WASM execution) (2.0699ms)
+✔ VST engine scenario 1, 44100 Hz (WASM execution) (312.8742ms)
+✔ VST engine scenario 2, 44100 Hz (WASM execution) (401.7753ms)
+✔ VST engine scenario 3, 44100 Hz (WASM execution) (430.4117ms)
+✔ VST engine scenario 4, 44100 Hz (WASM execution) (266.5869ms)
+✔ VST engine scenario 0, 48000 Hz (WASM execution) (0.3134ms)
+✔ VST engine scenario 1, 48000 Hz (WASM execution) (246.0871ms)
+✔ VST engine scenario 2, 48000 Hz (WASM execution) (364.4687ms)
+✔ VST engine scenario 3, 48000 Hz (WASM execution) (415.7763ms)
+✔ VST engine scenario 4, 48000 Hz (WASM execution) (250.4303ms)
+✔ VST engine scenario 0, 96000 Hz (WASM execution) (1.0172ms)
+✔ VST engine scenario 1, 96000 Hz (WASM execution) (203.185ms)
+✔ VST engine scenario 2, 96000 Hz (WASM execution) (280.1326ms)
+✔ VST engine scenario 3, 96000 Hz (WASM execution) (258.9644ms)
+✔ VST engine scenario 4, 96000 Hz (WASM execution) (165.174ms)
+✔ RMS has no artificial floor and scales with source amplitude (42.8586ms)
+✔ 1ms follower remains finite and audible at 8000 Hz / 64 frames (112.151ms)
+✔ 1ms follower remains finite and audible at 8000 Hz / 128 frames (54.4267ms)
+✔ 1ms follower remains finite and audible at 8000 Hz / 256 frames (41.408ms)
+✔ 1ms follower remains finite and audible at 44100 Hz / 64 frames (217.9466ms)
+✔ 1ms follower remains finite and audible at 44100 Hz / 128 frames (227.3575ms)
+✔ 1ms follower remains finite and audible at 44100 Hz / 256 frames (184.2685ms)
+✔ 1ms follower remains finite and audible at 48000 Hz / 64 frames (231.7926ms)
+✔ 1ms follower remains finite and audible at 48000 Hz / 128 frames (240.5941ms)
+✔ 1ms follower remains finite and audible at 48000 Hz / 256 frames (258.2701ms)
+✔ 1ms follower remains finite and audible at 96000 Hz / 64 frames (388.5347ms)
+✔ 1ms follower remains finite and audible at 96000 Hz / 128 frames (368.3627ms)
+✔ 1ms follower remains finite and audible at 96000 Hz / 256 frames (420.6834ms)
+✔ 1ms follower remains finite and audible at 192000 Hz / 64 frames (623.7691ms)
+✔ 1ms follower remains finite and audible at 192000 Hz / 128 frames (560.3564ms)
+✔ 1ms follower remains finite and audible at 192000 Hz / 256 frames (545.5047ms)
+✔ public chord 1 has its documented ratios (7.342ms)
+✔ public chord 2 has its documented ratios (6.0148ms)
+✔ public chord 3 has its documented ratios (6.1155ms)
+✔ public chord 4 has its documented ratios (4.1964ms)
+✔ public chord 5 has its documented ratios (4.797ms)
+✔ public chord 6 has its documented ratios (5.7717ms)
+✔ public chord 7 has its documented ratios (4.8917ms)
+✔ public chord 8 has its documented ratios (5.2589ms)
+✔ public chord 9 has its documented ratios (4.7773ms)
+✔ replacing a source stops direct playback and removes all previous effect history (17.5451ms)
+✔ filter cutoff and resonance have physical units at 44100 Hz (118.3953ms)
+✔ filter cutoff and resonance have physical units at 48000 Hz (104.3939ms)
+✔ filter cutoff and resonance have physical units at 96000 Hz (174.2009ms)
+✔ discrete estimator matches its target, A=1, method=0 (7.0766ms)
+✔ discrete estimator matches its target, A=1, method=1 (4.413ms)
+✔ discrete estimator matches its target, A=1, method=2 (5.2021ms)
+✔ discrete estimator matches its target, A=2, method=0 (11.6724ms)
+✔ discrete estimator matches its target, A=2, method=1 (6.3867ms)
+✔ discrete estimator matches its target, A=2, method=2 (3.8235ms)
+✔ discrete estimator matches its target, A=8, method=0 (7.1032ms)
+✔ discrete estimator matches its target, A=8, method=1 (5.8296ms)
+✔ discrete estimator matches its target, A=8, method=2 (4.8798ms)
+✔ WASM lab small aperture A=1, method=0 is unbiased for uniform energy (121.8184ms)
+✔ WASM lab small aperture A=1, method=1 is unbiased for uniform energy (53.8754ms)
+✔ WASM lab small aperture A=1, method=2 is unbiased for uniform energy (51.5261ms)
+✔ WASM lab small aperture A=1, method=3 is unbiased for uniform energy (57.5461ms)
+✔ WASM lab small aperture A=1, method=4 is unbiased for uniform energy (70.5744ms)
+✔ WASM lab small aperture A=2, method=0 is unbiased for uniform energy (48.8354ms)
+✔ WASM lab small aperture A=2, method=1 is unbiased for uniform energy (46.3067ms)
+✔ WASM lab small aperture A=2, method=2 is unbiased for uniform energy (48.3068ms)
+✔ WASM lab small aperture A=2, method=3 is unbiased for uniform energy (64.3812ms)
+✔ WASM lab small aperture A=2, method=4 is unbiased for uniform energy (76.9298ms)
+✔ rays destroys every GPU buffer on success (3.3931ms)
+✔ rays destroys every GPU buffer on pipeline (1.3561ms)
+✔ rays destroys every GPU buffer on map (0.5023ms)
+✔ room destroys every GPU buffer on success (1.3759ms)
+✔ room destroys every GPU buffer on pipeline (0.4789ms)
+✔ room destroys every GPU buffer on map (0.4806ms)
+✔ engine retries module registration after a transient failure (13.522ms)
+✔ concurrent initialization has one node and existing engine is not reloaded (5.8289ms)
+✔ successful file replacement atomically stops direct and resets UI and lab (12.4452ms)
+✔ stale decode completion cannot replace the newer source (2.2588ms)
+✔ decode error preserves existing playback and does not mutate source state (2.8691ms)
+✔ changing source cancels lab and rejects already queued results (6.3505ms)
+✔ sample and direct resets cannot overflow spawn telemetry or replay stale rays (44.192ms)
+✔ recording preserves frames across chunk boundaries and flushes once (14.4359ms)
+✔ SDK rejects protocol overrides and nonfinite values before sending any message (1.21ms)
+✔ partial SDK scenes receive complete audible defaults and bounded effects (2.053ms)
+✔ registered scene materials are immutable snapshots (0.6166ms)
+ℹ tests 84
+ℹ suites 0
+ℹ pass 84
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5970.0534

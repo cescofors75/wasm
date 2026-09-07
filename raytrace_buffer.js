@@ -12,7 +12,7 @@
 //
 //     est[n] = win[n] · (1/N) · Σ_i  s(f0 + k_i + n)        n = 0..D-1
 //
-// where each ray i lands at offset k_i = round(tri_inv(u_i) · a), u_i drawn by
+// where each ray i lands at offset k_i = inverse_discrete_triangular_CDF(u_i, a), u_i drawn by
 // the same low-discrepancy schemes as the engine (random / stratified / golden
 // QMC). As N grows, est → the analytic target (triangular-weighted average),
 // with error ~ 1/√N — the convergence that *is* RayDrone.
@@ -21,6 +21,19 @@
 //   - renderRays_CPU: reference (runs in Node → unit-tested; browser fallback).
 //   - renderRays_GPU: a WGSL compute port — one thread per output sample n,
 //     each summing the N shared ray offsets. No atomics, exact match to the CPU.
+
+function discreteTriOffset(u, aperture) {
+        const a = Math.max(1, Math.round(aperture));
+        let lo = 1 - a, hi = a - 1;
+        const denom = 2 * a * a;
+        while (lo < hi) {
+            const k = lo + Math.floor((hi - lo) / 2);
+            const j = k < 0 ? a + k : a - k;
+            const cdf = k < 0 ? j * (j + 1) / denom : 1 - j * (j - 1) / denom;
+            if (u < cdf) hi = k; else lo = k + 1;
+        }
+        return lo;
+    }
 
 const GOLDEN = 0.6180339887498949;
 
@@ -48,7 +61,7 @@ export function rayOffsets(aperture, rays, method = 2, seed = 1) {
         if (method === 1) u = (i + rand()) / rays;
         else if (method === 2) u = (rot + i * GOLDEN) % 1;
         else u = rand();
-        off[i] = Math.round(triInv(u) * aperture);
+        off[i] = discreteTriOffset(u, aperture);
     }
     return off;
 }
@@ -60,6 +73,7 @@ function sampleAt(buf, i) {
 /** Hann window of length D. */
 export function hann(D) {
     const w = new Float32Array(D);
+    if (D === 1) { w[0] = 1; return w; }
     for (let i = 0; i < D; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (D - 1));
     return w;
 }
@@ -131,24 +145,29 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 /** WebGPU renderer. Same args as the CPU one; returns Float32Array(D). */
 export async function renderRays_GPU(device, buffer, f0, aperture, rays, D, win, offsets) {
+    const buffers = [];
+    const createBuffer = options => {
+        const buffer = device.createBuffer(options); buffers.push(buffer); return buffer;
+    };
+    try {
     const off = offsets || rayOffsets(aperture, rays);
 
     const mkStorage = (arr, Ctor) => {
-        const b = device.createBuffer({ size: arr.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+        const b = createBuffer({ size: arr.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
         device.queue.writeBuffer(b, 0, arr);
         return b;
     };
     const bufB = mkStorage(buffer instanceof Float32Array ? buffer : Float32Array.from(buffer));
     const offB = mkStorage(off instanceof Int32Array ? off : Int32Array.from(off));
     const winB = mkStorage(win);
-    const estB = device.createBuffer({ size: D * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const estB = createBuffer({ size: D * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
 
     const params = new ArrayBuffer(16);
     new Int32Array(params)[0] = f0;
     new Uint32Array(params, 4)[0] = rays;
     new Uint32Array(params, 8)[0] = D;
     new Uint32Array(params, 12)[0] = buffer.length;
-    const uni = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const uni = createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(uni, 0, params);
 
     const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module: device.createShaderModule({ code: WGSL }), entryPoint: 'main' } });
@@ -168,7 +187,7 @@ export async function renderRays_GPU(device, buffer, f0, aperture, rays, D, win,
     pass.setPipeline(pipeline); pass.setBindGroup(0, bind);
     pass.dispatchWorkgroups(Math.ceil(D / 64));
     pass.end();
-    const read = device.createBuffer({ size: D * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const read = createBuffer({ size: D * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     enc.copyBufferToBuffer(estB, 0, read, 0, D * 4);
     device.queue.submit([enc.finish()]);
 
@@ -176,6 +195,10 @@ export async function renderRays_GPU(device, buffer, f0, aperture, rays, D, win,
     const out = new Float32Array(read.getMappedRange().slice(0));
     read.unmap();
     return out;
+
+    } finally {
+        for (const buffer of buffers) buffer.destroy();
+    }
 }
 
 /** Pick the GPU if available, else the CPU reference. Returns { est, backend }. */
@@ -186,7 +209,7 @@ export async function renderRays(buffer, f0, aperture, rays, D, win, opts = {}) 
             const adapter = await navigator.gpu.requestAdapter();
             if (adapter) {
                 const device = await adapter.requestDevice();
-                return { est: await renderRays_GPU(device, buffer, f0, aperture, rays, D, win, offsets), backend: 'webgpu' };
+                try { return { est: await renderRays_GPU(device, buffer, f0, aperture, rays, D, win, offsets), backend: 'webgpu' }; } finally { device.destroy(); }
             }
         } catch (e) { console.warn('WebGPU render failed, CPU fallback:', e); }
     }

@@ -712,7 +712,16 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
     }
 
     // ── Motor (lazy): AudioContext + worklet + módulo wasm ──────────────────
+    let engineInitPromise = null;
+    let workletRegistered = false;
     async function ensureEngine() {
+        if (node) return;
+        if (!engineInitPromise) {
+            engineInitPromise = initializeEngine().finally(() => { engineInitPromise = null; });
+        }
+        return engineInitPromise;
+    }
+    async function initializeEngine() {
         if (!ctx) {
             ctx = new (window.AudioContext || window.webkitAudioContext)();
             jsGain = ctx.createGain();
@@ -746,7 +755,10 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
             // No compilamos aquí: Safari no puede clonar un WebAssembly.Module
             // hacia el worklet (DataCloneError); le pasamos los bytes y compila él.
             wasmBytes = await fetchArrayBuffer('raydrone.wasm' + bust, { cache: 'no-store' });
-            await ctx.audioWorklet.addModule('processor.js' + bust);
+        }
+        if (!workletRegistered) {
+            await ctx.audioWorklet.addModule('processor.js?v=' + Date.now());
+            workletRegistered = true;
         }
         if (!node) {
             node = new AudioWorkletNode(ctx, 'raydrone', {
@@ -800,9 +812,6 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
             sendFilterLfo();
             sendAmbient();
         }
-        if (sampleData) {
-            node.port.postMessage({ type: 'sample', data: sampleData, sampleRate });
-        }
     }
 
     let audioLoadToken = 0;
@@ -811,6 +820,9 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
         // de decodeAudioData también funcionan así.
         const buf = await new Promise((res, rej) => ctx.decodeAudioData(raw, res, rej));
         if (token !== audioLoadToken) return false;
+
+        stop();
+        invalidateLab();
 
         // Downmix a mono promediando TODOS los canales (antes se tiraba el canal R)
         sampleData = new Float32Array(buf.length);
@@ -880,7 +892,7 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
     const scheduleDefaultAudio = window.requestIdleCallback
         ? (cb) => requestIdleCallback(cb, { timeout: 1200 })
         : (cb) => setTimeout(cb, 0);
-    scheduleDefaultAudio(() => { if (!sampleData) loadDefaultAudio(); });
+    scheduleDefaultAudio(() => { if (!sampleData && audioLoadToken === 0) loadDefaultAudio(); });
 
     // ── Transporte ──────────────────────────────────────────────────────
     function stopDry() {
@@ -909,7 +921,10 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
         stopAll();
     }
 
-    playBtn.addEventListener('click', () => { isPlaying ? stop() : play(); });
+    playBtn.addEventListener('click', () => {
+        if (isPlaying) stop();
+        else play().catch(err => { statusEl.textContent = String(err.message || err); });
+    });
 
     presets.forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -1953,6 +1968,30 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
     refreshLabTheme();
     window.addEventListener('raydrone:theme', () => { refreshLabTheme(); if (typeof labDrawPlot === 'function') labDrawPlot(); });
 
+function discreteTriOffset(u, aperture) {
+        const a = Math.max(1, Math.round(aperture));
+        let lo = 1 - a, hi = a - 1;
+        const denom = 2 * a * a;
+        while (lo < hi) {
+            const k = lo + Math.floor((hi - lo) / 2);
+            const j = k < 0 ? a + k : a - k;
+            const cdf = k < 0 ? j * (j + 1) / denom : 1 - j * (j - 1) / denom;
+            if (u < cdf) hi = k; else lo = k + 1;
+        }
+        return lo;
+    }
+    let labGeneration = 0;
+    function invalidateLab() {
+        labGeneration++;
+        if (labWorker) labWorker.terminate();
+        labWorker = null; labStop();
+        labTarget = null; labCurves = null; labA = 0; labF0 = 0;
+        labRun.disabled = false;
+        [labTargetBtn, labNoisyBtn, labCleanBtn, labStopBtn, labCsvBtn].forEach(b => b.disabled = true);
+        labReadout.textContent = rayI18n.t('Corre el test para ver la curva de convergencia');
+        labDrawPlot();
+    }
+
     function labGetHann() {
         if (labHann) return labHann;
         labHann = new Float32Array(LAB_GRAIN);
@@ -2021,7 +2060,7 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
             return out;
         }
         for (let i = 0; i < N; i++) {
-            const u = labU(method, i, N, rot), k = Math.round(labTri(u) * A), b = f0 + k;
+            const u = labU(method, i, N, rot), k = discreteTriOffset(u, A), b = f0 + k;
             for (let n = 0; n < D; n++) out[n] += labS(b + n);
         }
         const inv = 1 / N;
@@ -2038,6 +2077,7 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
     function labRunTest() {
         if (!sampleData) { labReadout.innerText = rayI18n.t('Carga un audio primero.'); return; }
         if (!wasmBytes) { labReadout.innerText = rayI18n.t('Motor no iniciado: recarga el audio.'); return; }
+        const generation = ++labGeneration;
         labRun.disabled = true;
         labReadout.innerText = rayI18n.t('Convergencia en wasm (motor real, semilla fija)…');
         const t = clamp(parseFloat(charSlider.value) / 100, 0, 1);
@@ -2047,10 +2087,12 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
         if (labWorker) labWorker.terminate();
         labWorker = new Worker('lab-worker.js');
         labWorker.onerror = (err) => {
+            if (generation !== labGeneration) return;
             labReadout.innerText = `Error en el worker del Lab: ${err.message || err}`;
             labRun.disabled = false;
         };
         labWorker.onmessage = (e) => {
+            if (generation !== labGeneration) return;
             const d = e.data;
             if (d.type === 'progress') {
                 labReadout.innerText = `Convergencia (wasm)… ${d.done}/${d.total}`;
@@ -2148,7 +2190,9 @@ FORM: Data-Sublime Instrument, full-width bench staging, concept seed daab2fb5.
     function labStop() { if (labAudio) { try { labAudio.stop(); } catch (e) {} try { labAudio.disconnect(); } catch (e) {} labAudio = null; } }
     async function labPlay(kind) {
         if (!labTarget) return;
+        const generation = labGeneration;
         await ensureEngine();
+        if (generation !== labGeneration || !labTarget) return;
         if (ctx.state === 'suspended') await ctx.resume();
         labStop();
         let g;

@@ -361,6 +361,8 @@ impl Plugin for RayDrone {
     }
 
     fn reset(&mut self) {
+        self.midi_held.fill(false);
+        self.engine.set_keys(&self.midi_held, 60);
         self.engine.reset();
     }
 
@@ -399,6 +401,14 @@ impl Plugin for RayDrone {
 
         // Bypass: pass the input straight through, untouched.
         if self.params.bypass.value() {
+            while let Some(event) = next_event {
+                match event {
+                    NoteEvent::NoteOn { note, .. } if note < 128 => self.midi_held[note as usize] = true,
+                    NoteEvent::NoteOff { note, .. } | NoteEvent::Choke { note, .. } if note < 128 => self.midi_held[note as usize] = false,
+                    _ => {}
+                }
+                next_event = context.next_event();
+            }
             return ProcessStatus::Normal;
         }
 
@@ -419,8 +429,8 @@ impl Plugin for RayDrone {
                 .is_some_and(|event| event.timing() as usize <= sample_offset)
             {
                 match next_event.take().unwrap() {
-                    NoteEvent::NoteOn { note, .. } => self.midi_held[note as usize] = true,
-                    NoteEvent::NoteOff { note, .. } | NoteEvent::Choke { note, .. } => {
+                    NoteEvent::NoteOn { note, .. } if note < 128 => self.midi_held[note as usize] = true,
+                    NoteEvent::NoteOff { note, .. } | NoteEvent::Choke { note, .. } if note < 128 => {
                         self.midi_held[note as usize] = false
                     }
                     _ => {}
@@ -1516,3 +1526,6 @@ impl Vst3Plugin for RayDrone {
 
 nih_export_clap!(RayDrone);
 nih_export_vst3!(RayDrone);
+
+#[cfg(test)]
+mod transport_tests;

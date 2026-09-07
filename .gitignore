@@ -1,2 +1,9 @@
 .vercel
 .env*.local
+.build/
+**/target/
+**/__pycache__/
+*.rlib
+node_modules/
+test-results/
+.audit/*.cjs

@@ -8,7 +8,8 @@ apertures), plus one synthetic bias-demonstration run. Raw data in
 Runs 1–4 are archival pilot data: their source audio and per-trial observations
 were not retained, and they predate the corrected importance normalization and
 exact reverse CDF sampler. They must not be used as confirmatory results for the
-current engine. Run 5 was regenerated from source with the corrected engine.
+current engine. Run 5 was regenerated on 2026-09-07 after correcting the RMS
+square root and using the exact discrete triangular CDF for all base samplers.
 
 ## Fitted convergence slopes (log RMS vs log N) — real audio, runs 1–4
 
@@ -22,8 +23,8 @@ current engine. Run 5 was regenerated from source with the corrected engine.
 
 Run 5 (synthetic, tone|near-silence boundary, N up to 32768, 8 trials) is kept
 out of the mean on purpose: it is the *bias demonstration*, not more of the same
-population. Its overall fitted slopes are random −0.458, stratified −0.959, qmc
-−0.786, importance −0.891, reverse −0.388. For reverse, one global slope
+population. Its overall fitted slopes are random −0.479, stratified −0.925, qmc
+−0.692, importance approximately −0.92, reverse −0.428. For reverse, one global slope
 obscures the high-N approach to a non-zero error floor.
 
 ## Current observations
@@ -44,8 +45,8 @@ over the measured N range. Its appeal is timbral, not numerical.
 **2b. On strongly structured material, the bias surfaces as a plateau — run 5.**
 With the aperture straddling a loud/near-silent boundary, reverse's error
 approaches a floor: between N = 8192 and 32768 its local slope is ≈ −0.10,
-while random is ≈ −0.45. At N = 32768, reverse reaches 3.22·10⁻³ and reweighted
-importance reaches 9.67·10⁻⁶, about 333× lower in this constructed condition.
+while random is ≈ −0.67. At N = 32768, reverse reaches 3.14·10⁻³ and reweighted
+importance reaches 9.84·10⁻⁶, about 319× lower in this constructed condition.
 For squared error, expected MSE decomposes into squared bias and variance; the
 CSV reports mean per-trial RMS, so that identity is not applied directly to the
 plotted statistic.

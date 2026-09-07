@@ -23,7 +23,7 @@
     function normaliseMaterial(definition) {
         if (!definition || typeof definition !== 'object') throw new TypeError('material definition must be an object');
         return Object.freeze({
-            base: (definition.base ?? Material.VACUUM) >>> 0,
+            base: clamp(definition.base, 0, 5, Material.VACUUM) >>> 0,
             amount: clamp(definition.amount ?? 1, 0, 1, 1),
             modulation: definition.modulation ? Object.freeze({
                 mode: clamp(definition.modulation.mode, 0, 2, 0) >>> 0,
@@ -35,17 +35,36 @@
             }) : null,
             effects: definition.effects ? Object.freeze({
                 delayWet: clamp(definition.effects.delayWet, 0, 1, 0), delayTime: clamp(definition.effects.delayTime, 0.01, 1.8, .38),
-                delayFeedback: clamp(definition.effects.delayFeedback, 0, .92, .35), chorusWet: clamp(definition.effects.chorusWet, 0, 1, 0),
+                delayFeedback: clamp(definition.effects.delayFeedback, 0, .68, .35), chorusWet: clamp(definition.effects.chorusWet, 0, 1, 0),
                 chorusRate: clamp(definition.effects.chorusRate, .01, 8, .25), chorusDepth: clamp(definition.effects.chorusDepth, .001, .03, .008),
-                reverbWet: clamp(definition.effects.reverbWet, 0, 1, 0),
+                reverbWet: clamp(definition.effects.reverbWet, 0, .82, 0),
             }) : null,
         });
     }
     function registerMaterial(name, definition) { assertName(name, 'material'); const d = normaliseMaterial(definition); materials.set(name, d); return d; }
+    const paramSchema = Object.freeze({
+        focus: [0, 3600, 0], aperture: [0, 3600, .1], grainMs: [1, 10000, 150],
+        grainRate: [0, 100000, 200], gain: [0, 8, .3], master: [0, 8, 1],
+    });
+    function normaliseScene(definition) {
+        if (!definition || typeof definition !== 'object' || Array.isArray(definition)) throw new TypeError('scene definition must be an object');
+        let params = null;
+        if (definition.params != null) {
+            if (typeof definition.params !== 'object' || Array.isArray(definition.params)) throw new TypeError('params must be an object');
+            for (const key of Object.keys(definition.params)) {
+                if (!Object.hasOwn(paramSchema, key)) throw new TypeError(`unknown scene parameter: ${key}`);
+                if (!Number.isFinite(definition.params[key])) throw new TypeError(`non-finite scene parameter: ${key}`);
+            }
+            params = Object.freeze(Object.fromEntries(Object.entries(paramSchema).map(([key, [lo, hi, fallback]]) =>
+                [key, clamp(definition.params[key], lo, hi, fallback)])));
+        }
+        const material = typeof definition.material === 'string' || definition.material == null
+            ? definition.material : normaliseMaterial(definition.material);
+        return Object.freeze({ material, params });
+    }
     function registerScene(name, definition) {
         assertName(name, 'scene');
-        if (!definition || typeof definition !== 'object') throw new TypeError('scene definition must be an object');
-        const d = Object.freeze({ material: definition.material || null, params: Object.freeze({ ...(definition.params || {}) }) });
+        const d = normaliseScene(definition);
         scenes.set(name, d); return d;
     }
     function post(port, message) {
@@ -53,16 +72,18 @@
         port.postMessage(message);
     }
     function applyMaterial(port, material) {
-        const d = typeof material === 'string' ? materials.get(material) : normaliseMaterial(material);
-        if (!d) throw new Error(`unknown RayDrone material: ${material}`);
+        const source = typeof material === 'string' ? materials.get(material) : material;
+        if (!source) throw new Error(`unknown RayDrone material: ${material}`);
+        const d = normaliseMaterial(source);
         post(port, { type: 'material', kind: d.base, amount: d.amount });
         if (d.modulation) post(port, { type: 'modulation', ...d.modulation });
         if (d.effects) { post(port, { type: 'effects', ...d.effects }); post(port, { type: 'reverb', wet: d.effects.reverbWet }); }
         return d;
     }
     function applyScene(port, scene) {
-        const d = typeof scene === 'string' ? scenes.get(scene) : scene;
-        if (!d) throw new Error(`unknown RayDrone scene: ${scene}`);
+        const source = typeof scene === 'string' ? scenes.get(scene) : scene;
+        if (!source) throw new Error(`unknown RayDrone scene: ${scene}`);
+        const d = normaliseScene(source);
         if (d.material) applyMaterial(port, d.material);
         if (d.params && Object.keys(d.params).length) post(port, { type: 'params', ...d.params });
         return d;

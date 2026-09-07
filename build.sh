@@ -3,8 +3,9 @@
 # no usa wasm-bindgen ni crates, así que NO necesita acceso a crates.io.
 set -e
 cd "$(dirname "$0")"
-core_tmp=libraydrone_core.tmp.rlib
-wasm_tmp=raydrone.tmp.wasm
+mkdir -p .build
+core_tmp=.build/libraydrone_core.tmp.rlib
+wasm_tmp=.build/raydrone.tmp.wasm
 trap 'rm -f "$core_tmp" "$wasm_tmp"' EXIT
 
 # El target de wasm hace falta una sola vez. Si ya está, esta línea no hace nada.
@@ -17,7 +18,7 @@ rustc --edition 2021 \
       --target wasm32-unknown-unknown \
       -O -C panic=abort -C lto=fat \
       --crate-name raydrone_core --crate-type=lib \
-      ../core/src/lib.rs -o "$core_tmp"
+      core/src/lib.rs -o "$core_tmp"
 
 # 2) Motor → wasm, enlazando el kernel por --extern.
 rustc --edition 2021 \
@@ -27,7 +28,7 @@ rustc --edition 2021 \
       --crate-type=cdylib \
       raydrone.rs -o "$wasm_tmp"
 
-mv "$core_tmp" libraydrone_core.rlib
+mv "$core_tmp" .build/libraydrone_core.rlib
 mv "$wasm_tmp" raydrone.wasm
 
 echo "✓ raydrone.wasm generado ($(wc -c < raydrone.wasm) bytes)"

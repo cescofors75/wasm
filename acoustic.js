@@ -228,6 +228,11 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 /** WebGPU tracer. Needs a GPUDevice (navigator.gpu). Returns { L, R, sr }. */
 export async function traceRoomIR_GPU(device, opts = {}) {
+    const buffers = [];
+    const createBuffer = options => {
+        const buffer = device.createBuffer(options); buffers.push(buffer); return buffer;
+    };
+    try {
     const p = { ...DEFAULT_ROOM, ...opts };
     const irLen = Math.max(1, Math.floor(p.sr * p.irSeconds));
 
@@ -239,12 +244,12 @@ export async function traceRoomIR_GPU(device, opts = {}) {
     u[12] = p.rays; u[13] = p.maxBounce; u[14] = irLen; u[15] = p.seed >>> 0;
     f[16] = p.sr; f[17] = p.absorption; f[18] = p.airCoef;          // (+pad f[19])
 
-    const uniform = device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const uniform = createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(uniform, 0, params);
 
     const bytes = irLen * 4;
-    const accumL = device.createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-    const accumR = device.createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const accumL = createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+    const accumR = createBuffer({ size: bytes, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
 
     const module = device.createShaderModule({ code: WGSL });
     const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
@@ -264,8 +269,8 @@ export async function traceRoomIR_GPU(device, opts = {}) {
     pass.dispatchWorkgroups(Math.ceil(p.rays / 64));
     pass.end();
 
-    const readL = device.createBuffer({ size: bytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-    const readR = device.createBuffer({ size: bytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const readL = createBuffer({ size: bytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+    const readR = createBuffer({ size: bytes, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     enc.copyBufferToBuffer(accumL, 0, readL, 0, bytes);
     enc.copyBufferToBuffer(accumR, 0, readR, 0, bytes);
     device.queue.submit([enc.finish()]);
@@ -280,6 +285,10 @@ export async function traceRoomIR_GPU(device, opts = {}) {
     for (let i = 0; i < irLen; i++) { Lf[i] = iL[i] / FIXED; Rf[i] = iR[i] / FIXED; }
     normalizeIR(Lf, Rf, p.rays);
     return { L: Lf, R: Rf, sr: p.sr };
+
+    } finally {
+        for (const buffer of buffers) buffer.destroy();
+    }
 }
 
 /** Convenience: use the GPU if available, else the CPU reference. */
@@ -289,7 +298,7 @@ export async function traceRoomIR(opts = {}) {
             const adapter = await navigator.gpu.requestAdapter();
             if (adapter) {
                 const device = await adapter.requestDevice();
-                return { ir: await traceRoomIR_GPU(device, opts), backend: 'webgpu' };
+                try { return { ir: await traceRoomIR_GPU(device, opts), backend: 'webgpu' }; } finally { device.destroy(); }
             }
         } catch (e) { console.warn('WebGPU IR failed, falling back to CPU:', e); }
     }
