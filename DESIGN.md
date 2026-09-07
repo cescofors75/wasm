@@ -52,6 +52,13 @@ components:
 
 # Design System: RayDrone Signal Field
 
+> Update 2026-09-07: the user selected a studio direction: graphite surfaces,
+> restrained mint accents and clearer controls. `studio.css` overrides the
+> historical binary palette and flat square treatment documented below.
+> Body labels use Segoe UI; measurements retain monospace. Materials use three
+> columns in the Basic desktop console and two on mobile. Language preferences
+> use a readable native list with all nine names and normal keyboard navigation.
+
 ## Overview
 
 **Creative North Star: "The Data-Sublime Instrument"**
